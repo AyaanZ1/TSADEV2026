@@ -1,0 +1,37 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "assets/fonts/DMSans-Regular.ttf",
+      "sha1": "77c76ae8f4f7b98b538279e8cbc7adb839d3483f"
+    },
+    {
+      "path": "assets/fonts/DMSans-Medium.ttf",
+      "sha1": "721da64767cc6877556106da3ebbbc734f9085a7"
+    },
+    {
+      "path": "assets/fonts/DMSans-Bold.ttf",
+      "sha1": "136748a17ee5a1eb36d6faaae49a4c46d12f80ae"
+    },
+    {
+      "path": "assets/fonts/Syne-Regular.ttf",
+      "sha1": "01ee0961a8088d6556d87b68766ca7e10fa6495c"
+    },
+    {
+      "path": "assets/fonts/Syne-ExtraBold.ttf",
+      "sha1": "515e8395601d4dacb537319d1bf9fd1b6e530f7a"
+    },
+    {
+      "path": "assets/fonts/Syne-Bold.ttf",
+      "sha1": "8623f68e1ffd2d0e111e44b2b474cfecb8f882a8"
+    },
+    {
+      "path": "assets/fonts/Syne-SemiBold.ttf",
+      "sha1": "e0dbf20e33711334bcbb3719ec43ce39114de4ef"
+    },
+    {
+      "path": "assets/fonts/Syne-Medium.ttf",
+      "sha1": "ae03fd06d8c2f69f7ecc4cfc348bac3035570712"
+    }
+  ]
+}

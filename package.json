@@ -15,8 +15,10 @@
     "react": "18.2.0",
     "react-native": "0.73.0",
     "react-native-haptic-feedback": "^2.3.3",
+    "react-native-heroicons": "^4.0.0",
     "react-native-linear-gradient": "^2.8.3",
     "react-native-live-audio-fft": "^1.3.0",
+    "react-native-svg": "^15.15.3",
     "zustand": "^5.0.10"
   },
   "devDependencies": {

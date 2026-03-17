@@ -1065,6 +1065,8 @@ PODS:
     - glog
     - RCT-Folly (= 2022.05.16.00)
     - React-Core
+  - RNSVG (15.15.3):
+    - React-Core
   - SocketRocket (0.6.1)
   - Yoga (1.14.0)
 
@@ -1123,6 +1125,7 @@ DEPENDENCIES:
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - RNAudioPcmStream (from `../node_modules/react-native-live-audio-fft`)
   - RNReactNativeHapticFeedback (from `../node_modules/react-native-haptic-feedback`)
+  - RNSVG (from `../node_modules/react-native-svg`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
@@ -1235,11 +1238,13 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-live-audio-fft"
   RNReactNativeHapticFeedback:
     :path: "../node_modules/react-native-haptic-feedback"
+  RNSVG:
+    :path: "../node_modules/react-native-svg"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  boost: fc4af0486d58294905eb90f4291f467860b6dcec
+  boost: d3f49c53809116a5d38da093a8aa78bf551aed09
   BVLinearGradient: cb006ba232a1f3e4f341bb62c42d1098c284da70
   DoubleConversion: fea03f2699887d960129cc54bba7e52542b6f953
   FBLazyVector: 39ba45baf4e398618f8b3a4bb6ba8fcdb7fc2133
@@ -1248,7 +1253,7 @@ SPEC CHECKSUMS:
   glog: c5d68082e772fa1c511173d6b30a9de2c05a69a2
   hermes-engine: 34304f8c6e8fa68f63a5fe29af82f227d817d7a7
   libevent: 4049cae6c81cdb3654a443be001fb9bdceff7913
-  RCT-Folly: cd21f1661364f975ae76b3308167ad66b09f53f5
+  RCT-Folly: 7169b2b1c44399c76a47b5deaaba715eeeb476c0
   RCTRequired: 5e3631b27c08716986980ef23eed8abdee1cdcaf
   RCTTypeSafety: 02a64828b0b428eb4f63de1397d44fb2d0747e85
   React: df5dbfbd10c5bd8d4bcb49bd9830551533e11c7e
@@ -1292,9 +1297,10 @@ SPEC CHECKSUMS:
   ReactCommon: b2d9a4d3c5a82ac14a0054ccdba9e6858fef873b
   RNAudioPcmStream: 1f71e3e12272aadc944223267bea42387a1f1bfe
   RNReactNativeHapticFeedback: ba030ba3a1ae31a0606f20ab1dcf62285e853b88
+  RNSVG: 7c30db7db27afaa6e4d38a598371b98a1b2bd181
   SocketRocket: f32cd54efbe0f095c4d7594881e52619cfe80b17
   Yoga: 44003f970aa541b79dfdd59cf236fda41bd5890f
 
-PODFILE CHECKSUM: fae0bd404e80567b2863d837040d11c54f2e9987
+PODFILE CHECKSUM: 2387a9c1493311c364b792fcd1e0148e2e4d760e
 
 COCOAPODS: 1.16.2
