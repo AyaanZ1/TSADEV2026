@@ -644,7 +644,7 @@ export const Dashboard = () => {
       <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
         {/* Header */}
         <View style={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 12, flexShrink: 0, zIndex: 2 }}>
-          <Text style={{ color: palette.violet, fontSize: 26, fontFamily: 'Syne-ExtraBold', fontWeight: '800', letterSpacing: -0.5 }}>
+          <Text style={{ color: palette.violet, fontSize: 26, fontFamily: 'Syne-Bold', letterSpacing: -0.5 }}>
             RESONATE
           </Text>
           <Text style={{ color: palette.textSub, fontSize: 11, marginTop: 2, letterSpacing: 1.3, fontFamily: 'DMSans-Medium', fontWeight: '500' }}>
