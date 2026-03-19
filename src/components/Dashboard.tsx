@@ -1,33 +1,32 @@
+import { BlurView } from '@react-native-community/blur';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
-  Easing,
-  PanResponder,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    Animated,
+    Easing,
+    PanResponder,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { BlurView } from '@react-native-community/blur';
+import {
+    BoltIcon,
+    ChartBarIcon,
+    ClockIcon,
+    Cog6ToothIcon,
+    MicrophoneIcon,
+    MoonIcon,
+    MusicalNoteIcon,
+    SpeakerWaveIcon,
+    Squares2X2Icon,
+    StopIcon,
+    SunIcon,
+} from 'react-native-heroicons/outline';
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, { Defs, Ellipse, Path, RadialGradient, Stop } from 'react-native-svg';
-import {
-  BoltIcon,
-  ChartBarIcon,
-  ClockIcon,
-  Cog6ToothIcon,
-  MicrophoneIcon,
-  MoonIcon,
-  MusicalNoteIcon,
-  SpeakerWaveIcon,
-  Squares2X2Icon,
-  StopIcon,
-  SunIcon,
-} from 'react-native-heroicons/outline';
 import { AudioService } from '../services/AudioService';
 import { HapticEngine } from '../services/HapticEngine';
 
@@ -605,7 +604,7 @@ export const Dashboard = () => {
     return () => clearInterval(interval);
   }, [recognized]);
 
-  const handleListen = () => {
+  const handleListen = async () => {
     if (recognized) {
       setRecognized(false);
       setIsListening(false);

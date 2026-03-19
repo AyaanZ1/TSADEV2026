@@ -5,7 +5,9 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-platform :ios, min_ios_version_supported
+platform :ios, '15.0'
+  # Ensure ShazamKit compatibility
+
 prepare_react_native_project!
 
 # React Native 0.73 points boost to a JFrog URL that can return a bad archive/checksum.
