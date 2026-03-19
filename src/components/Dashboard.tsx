@@ -29,6 +29,9 @@ import LinearGradient from 'react-native-linear-gradient';
 import Svg, { Defs, Ellipse, Path, RadialGradient, Stop } from 'react-native-svg';
 import { AudioService } from '../services/AudioService';
 import { HapticEngine } from '../services/HapticEngine';
+import { MusicRecognitionService, RecognitionResult } from '../services/MusicRecognitionService';
+import { LRCLIBService, LRCLine } from '../services/LRCLIBService';
+import { LyricSyncEngine } from '../services/LyricSyncEngine';
 
 type ThemeMode = 'dark' | 'light' | 'amoled';
 type Tab = 'listen' | 'haptic' | 'settings';
@@ -65,7 +68,7 @@ const getPalette = (theme: ThemeMode): Palette => {
   };
 };
 
-// ── True Glow Orb (SVG RadialGradient — actual smooth falloff) ──
+// Glow orb using SVG radial gradient for smooth falloff
 const GlowOrb = ({
   id,
   color,
@@ -105,7 +108,7 @@ const GlowOrb = ({
   </Animated.View>
 );
 
-// ── Marquee Text (seamless infinite Spotify-style scroll) ──
+// Marquee text - scrolls when text overflows container
 const MarqueeText = ({ text, textStyle, forceScroll }: { text: string; textStyle?: object; forceScroll?: boolean }) => {
   const [containerW, setContainerW] = useState(0);
   const [textW, setTextW] = useState(0);
@@ -117,7 +120,7 @@ const MarqueeText = ({ text, textStyle, forceScroll }: { text: string; textStyle
   useEffect(() => {
     tx.setValue(0);
     if (!shouldScroll) return;
-    // Animate full text+gap width, second copy fills the gap for seamless loop
+    // Scroll the full text+gap width, second copy keeps it looping
     const loop = Animated.loop(
       Animated.timing(tx, {
         toValue: -(textW + GAP),
@@ -155,7 +158,7 @@ const MarqueeText = ({ text, textStyle, forceScroll }: { text: string; textStyle
   );
 };
 
-// ── SVG Waveform ──
+// SVG Waveform
 const SvgWaveform = ({
   active,
   intensity,
@@ -220,7 +223,7 @@ const SvgWaveform = ({
   );
 };
 
-// ── Listen Control ──
+// Listen Control
 const ListenControl = ({
   isActive,
   isRecognized,
@@ -323,7 +326,7 @@ const ListenControl = ({
   );
 };
 
-// ── Lyric Line ──
+// Lyric Line
 const LyricLine = ({
   text,
   isActive,
@@ -368,7 +371,7 @@ const LyricLine = ({
   );
 };
 
-// ── Custom Slider ──
+// Custom Slider
 const CustomSlider = ({
   value,
   min,
@@ -437,7 +440,7 @@ const CustomSlider = ({
   );
 };
 
-// ── Nav Item ──
+// Nav Item
 const NavItem = ({
   IconComponent,
   label,
@@ -472,7 +475,7 @@ const NavItem = ({
   </TouchableOpacity>
 );
 
-// ── Glass Card ──
+// Glass Card
 const GlassCard = ({
   children,
   style,
@@ -501,7 +504,7 @@ const GlassCard = ({
   );
 };
 
-// ── Main Dashboard ──
+// Main Dashboard
 export const Dashboard = () => {
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [showSplash, setShowSplash] = useState(true);
@@ -511,46 +514,37 @@ export const Dashboard = () => {
   const [intensity, setIntensity] = useState(72);
   const [bassBoost, setBassBoost] = useState(55);
   const [trebleBoost, setTrebleBoost] = useState(40);
-  const [currentLyric, setCurrentLyric] = useState(2);
-  const [language, setLanguage] = useState('EN');
   const [defaultLyricLang, setDefaultLyricLang] = useState('EN');
   const [appLanguage, setAppLanguage] = useState('English');
   const [fontSize, setFontSize] = useState<'S' | 'M' | 'L' | 'XL'>('M');
   const [elapsed, setElapsed] = useState(0);
   const [activePreset, setActivePreset] = useState<string | null>(null);
+
+  // Song data from recognition
+  const [songTitle, setSongTitle] = useState('');
+  const [songArtist, setSongArtist] = useState('');
+  const [matchOffset, setMatchOffset] = useState(0);
+
+  // Lyrics pipeline state
+  type LyricsStatus = 'idle' | 'loading' | 'synced' | 'plain' | 'unavailable';
+  const [syncedLyrics, setSyncedLyrics] = useState<LRCLine[]>([]);
+  const [plainLyrics, setPlainLyrics] = useState<string[] | null>(null);
+  const [currentLyricIndex, setCurrentLyricIndex] = useState(-1);
+  const [lyricsStatus, setLyricsStatus] = useState<LyricsStatus>('idle');
+  const [recognitionError, setRecognitionError] = useState<string | null>(null);
+
   const splashOpacity = useRef(new Animated.Value(1)).current;
   const breathe = useRef(new Animated.Value(1)).current;
 
-  const palette = getPalette(theme);
+  // Refs for async flow control
+  const isListeningRef = useRef(false);
+  const recognizedRef = useRef(false);
+  const sessionIdRef = useRef(0);
+  const syncEngineRef = useRef(new LyricSyncEngine());
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const lyricScrollRef = useRef<ScrollView>(null);
 
-  const lyrics = useMemo(
-    () => [
-      "I've been searching for a light",
-      'Through the noise of every night',
-      'Feel the rhythm in my bones',
-      'Every vibration finds its home',
-      'Colors dancing, worlds collide',
-      "Sound becomes the ocean's tide",
-      'Resonate with every beat',
-      '',
-      'Lost between the highs and lows',
-      'Where the silent river flows',
-      'Frequencies that paint the air',
-      'Wavelengths tangled in my hair',
-      'Turn the volume into touch',
-      'Feel the bass, it says so much',
-      'Every pulse a whispered song',
-      'Pulling me where I belong',
-      '',
-      'Echoes falling through the dark',
-      'Every note becomes a spark',
-      'Hands against the speaker wall',
-      'I can feel it, feel it all',
-      'Resonate with every beat',
-      'Until the silence feels complete',
-    ],
-    [],
-  );
+  const palette = getPalette(theme);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -572,53 +566,149 @@ export const Dashboard = () => {
     return () => clearTimeout(fade);
   }, [splashOpacity]);
 
+  // Rhythm-synced haptics: runs while a song is recognized, mic stays open
   useEffect(() => {
+    if (!recognized) return undefined;
     const listener = AudioService.addListener(data => {
-      if (!isListening) return;
-      HapticEngine.processFrequency(data.frequency);
+      HapticEngine.processAudioFrame(data.amplitude, data.frequency);
     });
     return () => {
       listener.remove();
       AudioService.stop();
+      HapticEngine.reset();
     };
-  }, [isListening]);
-
-  useEffect(() => {
-    if (!isListening || recognized) return undefined;
-    const timer = setTimeout(() => {
-      setRecognized(true);
-      HapticEngine.triggerSuccess();
-    }, 2200);
-    return () => clearTimeout(timer);
-  }, [isListening, recognized]);
-
-  useEffect(() => {
-    if (!recognized) return undefined;
-    const interval = setInterval(() => setCurrentLyric(p => (p + 1) % 7), 3000);
-    return () => clearInterval(interval);
   }, [recognized]);
 
+  // Elapsed time counter while playing
   useEffect(() => {
     if (!recognized) return undefined;
     const interval = setInterval(() => setElapsed(p => p + 1), 1000);
     return () => clearInterval(interval);
   }, [recognized]);
 
+  // Auto-scroll lyrics to the active line
+  useEffect(() => {
+    if (currentLyricIndex < 0 || !lyricScrollRef.current || lyricsStatus !== 'synced') return;
+    const lineH = fontSize === 'XL' ? 42 : fontSize === 'L' ? 36 : fontSize === 'M' ? 30 : 24;
+    const target = Math.max(0, currentLyricIndex * lineH - 80);
+    lyricScrollRef.current.scrollTo({ y: target, animated: true });
+  }, [currentLyricIndex, fontSize, lyricsStatus]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      syncEngineRef.current.stop();
+      abortControllerRef.current?.abort();
+      MusicRecognitionService.stop();
+      AudioService.stop();
+    };
+  }, []);
+
+  // Fetch lyrics from LRCLIB after recognition
+  const fetchLyricsForSong = async (result: RecognitionResult) => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setLyricsStatus('loading');
+
+    try {
+      const data = await LRCLIBService.fetchLyrics(result.title, result.artist, controller.signal);
+      if (controller.signal.aborted) return;
+
+      if (data.syncedLyrics && data.syncedLyrics.length > 0) {
+        setSyncedLyrics(data.syncedLyrics);
+        setLyricsStatus('synced');
+        syncEngineRef.current.start({
+          lyrics: data.syncedLyrics,
+          matchOffset: result.matchOffset,
+          matchSystemTime: result.matchSystemTime,
+          trackId: data.trackId,
+          callback: (idx) => setCurrentLyricIndex(idx),
+        });
+      } else if (data.plainLyrics && data.plainLyrics.length > 0) {
+        setPlainLyrics(data.plainLyrics);
+        setLyricsStatus('plain');
+      } else {
+        setLyricsStatus('unavailable');
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      setLyricsStatus('unavailable');
+    }
+  };
+
   const handleListen = async () => {
-    if (recognized) {
+    // Stop everything if already recognized
+    if (recognizedRef.current) {
+      syncEngineRef.current.stop();
+      abortControllerRef.current?.abort();
+      MusicRecognitionService.stop();
+      AudioService.stop();
+      HapticEngine.reset();
+      recognizedRef.current = false;
+      isListeningRef.current = false;
       setRecognized(false);
       setIsListening(false);
       setElapsed(0);
-      setCurrentLyric(2);
-      AudioService.stop();
+      setSongTitle('');
+      setSongArtist('');
+      setMatchOffset(0);
+      setSyncedLyrics([]);
+      setPlainLyrics(null);
+      setCurrentLyricIndex(-1);
+      setLyricsStatus('idle');
+      setRecognitionError(null);
       return;
     }
-    setIsListening(prev => {
-      const next = !prev;
-      if (next) AudioService.start();
-      else AudioService.stop();
-      return next;
-    });
+
+    // Cancel if already listening
+    if (isListeningRef.current) {
+      MusicRecognitionService.stop();
+      isListeningRef.current = false;
+      setIsListening(false);
+      return;
+    }
+
+    // Start a new recognition session
+    const mySession = ++sessionIdRef.current;
+    isListeningRef.current = true;
+    setIsListening(true);
+    setRecognitionError(null);
+
+    try {
+      const result = await MusicRecognitionService.identify();
+      if (sessionIdRef.current !== mySession) return;
+
+      // Show song info right away
+      setSongTitle(result.title);
+      setSongArtist(result.artist);
+      setMatchOffset(result.matchOffset);
+      recognizedRef.current = true;
+      isListeningRef.current = false;
+      setRecognized(true);
+      setIsListening(false);
+      setElapsed(0);
+
+      // Start mic for rhythm haptics
+      AudioService.start();
+      HapticEngine.triggerSuccess();
+
+      // Fetch lyrics in background (non-blocking)
+      fetchLyricsForSong(result);
+    } catch (err: any) {
+      if (sessionIdRef.current !== mySession) return;
+      isListeningRef.current = false;
+      setIsListening(false);
+
+      const code = err.code || err.message || '';
+      if (code === 'CANCELLED') {
+        // User cancelled, nothing to show
+      } else if (code === 'TIMEOUT') {
+        setRecognitionError('No song recognized');
+      } else if (code !== 'BUSY') {
+        setRecognitionError('Recognition failed');
+      }
+    }
   };
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -654,7 +744,7 @@ export const Dashboard = () => {
         {/* Tab content */}
         <View style={{ flex: 1, paddingHorizontal: 24, overflow: 'hidden' }}>
 
-          {/* ── LISTEN TAB — flex column, no outer scroll ── */}
+          {/* Listen tab */}
           {tab === 'listen' && (
             <View style={{ flex: 1, flexDirection: 'column' }}>
               {/* Waveform */}
@@ -675,7 +765,7 @@ export const Dashboard = () => {
                       </View>
                     </View>
                     <Text style={{ color: palette.gold, fontFamily: 'Syne-Bold', fontWeight: '700', fontSize: 13 }}>
-                      {formatTime(elapsed)}
+                      {formatTime(Math.floor(matchOffset + elapsed))}
                     </Text>
                   </View>
                 )}
@@ -685,6 +775,11 @@ export const Dashboard = () => {
               {!recognized && (
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 80 }}>
                   <ListenControl isActive={isListening} isRecognized={false} palette={palette} onPress={handleListen} />
+                  {recognitionError && (
+                    <Text style={{ color: palette.coral, fontSize: 13, fontFamily: 'DMSans-Regular', marginTop: 12 }}>
+                      {recognitionError}
+                    </Text>
+                  )}
                 </View>
               )}
 
@@ -708,50 +803,76 @@ export const Dashboard = () => {
                     </TouchableOpacity>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <MarqueeText
-                        text="Echoes of Light — Extended Remaster Edition"
+                        text={songTitle}
                         textStyle={{ fontFamily: 'Syne-ExtraBold', fontWeight: '800', fontSize: 18, color: palette.text }}
                         forceScroll
                       />
                       <Text style={{ fontSize: 13, color: palette.textSub, fontFamily: 'DMSans-Regular', marginTop: 2 }} numberOfLines={1}>
-                        Aurora Waves · Dreamstate EP
+                        {songArtist}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Lyrics card — fills remaining space, scrolls internally */}
+                  {/* Lyrics card */}
                   <GlassCard palette={palette} style={{ flex: 1, marginBottom: 88, padding: 18 }}>
                     <View style={[styles.rowBetween, { marginBottom: 12, flexShrink: 0 }]}>
                       <Text style={{ color: palette.violet, fontSize: 11, fontFamily: 'DMSans-Bold', fontWeight: '700', letterSpacing: 1 }}>
-                        RESOLYRIC · {language}
+                        RESOLYRIC
                       </Text>
-                      <View style={{ flexDirection: 'row' }}>
-                        {['EN', 'ES', 'KR', 'JP'].map(l => (
-                          <TouchableOpacity
-                            key={l}
-                            onPress={() => setLanguage(l)}
-                            style={{
-                              paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 5,
-                              backgroundColor: language === l ? palette.violet : 'transparent',
-                              borderWidth: 0,
-                            }}
-                          >
-                            <Text style={{ color: language === l ? '#fff' : palette.textSub, fontSize: 10, fontFamily: 'DMSans-Bold', fontWeight: '700' }}>{l}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
+                      {lyricsStatus === 'synced' && (
+                        <View style={[styles.tag, { borderColor: `${palette.coral}66`, backgroundColor: `${palette.coral}22`, marginRight: 0 }]}>
+                          <Text style={[styles.tagText, { color: palette.coral, fontFamily: 'DMSans-Bold' }]}>SYNCED</Text>
+                        </View>
+                      )}
+                      {lyricsStatus === 'plain' && (
+                        <View style={[styles.tag, { borderColor: `${palette.cyan}66`, backgroundColor: `${palette.cyan}22`, marginRight: 0 }]}>
+                          <Text style={[styles.tagText, { color: palette.cyan, fontFamily: 'DMSans-Bold' }]}>PLAIN</Text>
+                        </View>
+                      )}
                     </View>
-                    <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-                      {lyrics.map((line, i) => (
-                        <LyricLine key={i} text={line} isActive={i === currentLyric} isPast={i < currentLyric} palette={palette} size={fontSize} />
-                      ))}
-                    </ScrollView>
+
+                    {lyricsStatus === 'loading' && (
+                      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                        <Text style={{ color: palette.textSub, fontFamily: 'DMSans-Regular', fontSize: 13 }}>Loading lyrics...</Text>
+                      </View>
+                    )}
+
+                    {lyricsStatus === 'synced' && (
+                      <ScrollView ref={lyricScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                        {syncedLyrics.map((line, i) => (
+                          <LyricLine key={i} text={line.text} isActive={i === currentLyricIndex} isPast={i < currentLyricIndex} palette={palette} size={fontSize} />
+                        ))}
+                      </ScrollView>
+                    )}
+
+                    {lyricsStatus === 'plain' && plainLyrics && (
+                      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                        {plainLyrics.map((line, i) => (
+                          <Text key={i} style={{
+                            color: palette.text,
+                            fontSize: fontSize === 'XL' ? 26 : fontSize === 'L' ? 22 : fontSize === 'M' ? 18 : 14,
+                            fontFamily: 'Syne-Regular',
+                            paddingVertical: 5,
+                            opacity: 0.8,
+                          }}>
+                            {line}
+                          </Text>
+                        ))}
+                      </ScrollView>
+                    )}
+
+                    {lyricsStatus === 'unavailable' && (
+                      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                        <Text style={{ color: palette.textSub, fontFamily: 'DMSans-Regular', fontSize: 13 }}>Lyrics unavailable</Text>
+                      </View>
+                    )}
                   </GlassCard>
                 </View>
               )}
             </View>
           )}
 
-          {/* ── HAPTIC TAB ── */}
+          {/* Haptic tab */}
           {tab === 'haptic' && (
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginBottom: 4 }}>
@@ -819,7 +940,7 @@ export const Dashboard = () => {
             </ScrollView>
           )}
 
-          {/* ── SETTINGS TAB ── */}
+          {/* Settings tab */}
           {tab === 'settings' && (
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
               <GlassCard palette={palette} style={{ padding: 20 }}>
@@ -897,18 +1018,20 @@ export const Dashboard = () => {
                 <Text style={{ color: palette.gold, fontSize: 11, fontFamily: 'DMSans-Bold', fontWeight: '700', letterSpacing: 1, marginBottom: 12 }}>DEFAULT LYRIC LANGUAGE</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4 }}>
                   {[
-                    { code: 'EN', flag: '🇺🇸', name: 'English' },
-                    { code: 'ES', flag: '🇪🇸', name: 'Español' },
-                    { code: 'KR', flag: '🇰🇷', name: '한국어' },
-                    { code: 'JP', flag: '🇯🇵', name: '日本語' },
-                    { code: 'FR', flag: '🇫🇷', name: 'Français' },
-                    { code: 'ZH', flag: '🇨🇳', name: '中文' },
+                    { code: 'EN', name: 'English' },
+                    { code: 'ES', name: 'Español' },
+                    { code: 'KR', name: '한국어' },
+                    { code: 'JP', name: '日本語' },
+                    { code: 'FR', name: 'Français' },
+                    { code: 'ZH', name: '中文' },
                   ].map(lang => {
                     const sel = defaultLyricLang === lang.code;
                     return (
                       <TouchableOpacity key={lang.code} onPress={() => setDefaultLyricLang(lang.code)} style={{ width: '33.33%', padding: 4 }}>
                         <View style={{ borderRadius: 12, paddingVertical: 10, alignItems: 'center', borderWidth: sel ? 2 : 1, borderColor: sel ? palette.gold : palette.surfaceBorder, backgroundColor: sel ? `${palette.gold}12` : 'transparent' }}>
-                          <Text style={{ fontSize: 20, marginBottom: 2 }}>{lang.flag}</Text>
+                          <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: sel ? `${palette.gold}20` : (palette.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'), alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+                            <Text style={{ fontSize: 13, fontFamily: 'Syne-Bold', fontWeight: '700', color: sel ? palette.gold : palette.textSub }}>{lang.code}</Text>
+                          </View>
                           <Text style={{ fontSize: 10, fontFamily: sel ? 'DMSans-Bold' : 'DMSans-Regular', fontWeight: sel ? '700' : '500', color: sel ? palette.gold : palette.textSub }}>{lang.name}</Text>
                         </View>
                       </TouchableOpacity>
@@ -935,7 +1058,7 @@ export const Dashboard = () => {
         </View>
       </SafeAreaView>
 
-      {/* Nav Bar — gradient fades from transparent to solid theme bg, matching prototype */}
+      {/* Nav Bar */}
       <LinearGradient
         colors={[navBgTransparent, navBgSolid, navBgSolid]}
         locations={[0, 0.4, 1]}

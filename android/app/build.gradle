@@ -109,6 +109,10 @@ dependencies {
     implementation("com.facebook.react:react-android")
     implementation("com.facebook.react:flipper-integration")
 
+    // ShazamKit Android SDK
+    implementation files('libs/shazamkit-android-release.aar')
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {

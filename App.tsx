@@ -1,5 +1,5 @@
 import React from 'react';
-import { SafeAreaView, StatusBar } from 'react-native';
+import { StatusBar } from 'react-native';
 import { Dashboard } from './src/components/Dashboard';
 
 const App = () => {
