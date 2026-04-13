@@ -3,7 +3,7 @@ import ShazamKit
 import AVFoundation
 
 @objc(ShazamKitRecognition)
-class ShazamKitRecognition: NSObject {
+class ShazamKitRecognition: RCTEventEmitter {
     private var session: SHSession?
     private var audioEngine: AVAudioEngine?
     private var recognitionResolve: RCTPromiseResolveBlock?
@@ -11,9 +11,14 @@ class ShazamKitRecognition: NSObject {
     private var timeoutTimer: Timer?
     private var isListening = false
     private var hasResolved = false
+    private var signatureCount = 0
 
-    @objc static func requiresMainQueueSetup() -> Bool {
+    @objc override static func requiresMainQueueSetup() -> Bool {
         return false
+    }
+
+    override func supportedEvents() -> [String]! {
+        return ["shazamAmplitude"]
     }
 
     @objc
@@ -57,12 +62,38 @@ class ShazamKitRecognition: NSObject {
 
     private func startListening() {
         do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.record, mode: .default, options: .duckOthers)
+            try audioSession.setActive(true)
+
             let engine = AVAudioEngine()
             let inputNode = engine.inputNode
-            let format = inputNode.outputFormat(forBus: 0)
 
-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-                self?.session?.matchStreamingBuffer(buffer, at: nil)
+            // Use the input node's native output format — mismatched formats can cause
+            // installTap to throw an Obj-C exception that Swift do/catch can't catch
+            let format = inputNode.outputFormat(forBus: 0)
+            guard format.sampleRate > 0 && format.channelCount > 0 else {
+                throw NSError(domain: "ShazamKit", code: -1,
+                              userInfo: [NSLocalizedDescriptionKey: "Audio hardware format not ready"])
+            }
+
+            inputNode.installTap(onBus: 0, bufferSize: 8192, format: format) { [weak self] buffer, time in
+                guard let self = self else { return }
+
+                // Feed ShazamKit
+                self.session?.matchStreamingBuffer(buffer, at: time)
+
+                // Compute RMS amplitude and emit for waveform feedback
+                if let channelData = buffer.floatChannelData {
+                    let frameCount = Int(buffer.frameLength)
+                    guard frameCount > 0 else { return }
+                    var sumSq: Float = 0
+                    let channel = channelData[0]
+                    for i in 0..<frameCount { sumSq += channel[i] * channel[i] }
+                    let rms = sqrt(sumSq / Float(frameCount))
+                    let amplitude = Double(min(rms * 10.0, 1.0))
+                    self.sendEvent(withName: "shazamAmplitude", body: ["amplitude": amplitude])
+                }
             }
 
             engine.prepare()
@@ -85,6 +116,7 @@ class ShazamKitRecognition: NSObject {
         engine.inputNode.removeTap(onBus: 0)
         audioEngine = nil
         isListening = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     private func handleTimeout() {
@@ -99,6 +131,7 @@ class ShazamKitRecognition: NSObject {
         recognitionResolve = nil
         recognitionReject = nil
         session = nil
+        signatureCount = 0
     }
 }
 
@@ -111,10 +144,15 @@ extension ShazamKitRecognition: SHSessionDelegate {
             self.hasResolved = true
 
             if let item = match.mediaItems.first {
+                // Replace Apple Music artwork size placeholders
+                var artworkStr = item.artworkURL?.absoluteString ?? ""
+                artworkStr = artworkStr.replacingOccurrences(of: "{w}", with: "400")
+                artworkStr = artworkStr.replacingOccurrences(of: "{h}", with: "400")
+
                 let metadata: [String: Any] = [
                     "title": item.title ?? "",
                     "artist": item.artist ?? "",
-                    "artworkURL": item.artworkURL?.absoluteString ?? "",
+                    "artworkURL": artworkStr,
                     "genres": item.genres,
                     "matchOffset": item.predictedCurrentMatchOffset
                 ]
@@ -126,6 +164,34 @@ extension ShazamKitRecognition: SHSessionDelegate {
         }
     }
 
-    // Don't stop on no-match during streaming, keep listening until timeout
-    func session(_ session: SHSession, didNotFindMatchFor signature: SHSignature, error: Error?) {}
+    // Count every signature attempt so JS can confirm ShazamKit is actually working.
+    // Serialize state + event emission through the main queue to avoid a data race with the audio tap thread.
+    func session(_ session: SHSession, didNotFindMatchFor signature: SHSignature, error: Error?) {
+        let friendly = ShazamKitRecognition.humanErrorMessage(error)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.isListening else { return }
+            self.signatureCount += 1
+            var body: [String: Any] = [
+                "amplitude": -1.0,
+                "sigs": self.signatureCount,
+            ]
+            if let msg = friendly { body["error"] = msg }
+            self.sendEvent(withName: "shazamAmplitude", body: body)
+        }
+    }
+
+    private static func humanErrorMessage(_ error: Error?) -> String? {
+        guard let err = error as NSError? else { return nil }
+        if err.domain == "SHErrorDomain" || err.domain.contains("ShazamKit") {
+            switch err.code {
+            case 100: return "Invalid audio format"
+            case 101: return "Audio interruption"
+            case 200, 201: return "Keep the mic steady — audio too short to match"
+            case 202: return "Can't reach Shazam servers — check your internet connection"
+            case 203, 204: return "Shazam catalog error"
+            default: return "Shazam error \(err.code)"
+            }
+        }
+        return err.localizedDescription
+    }
 }

@@ -12,15 +12,21 @@
 		13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB01A68108700A75B9A /* AppDelegate.mm */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
+		2A01D5AF06A3606692F14E38 /* AppIconDark@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 52D0BD8C63A7865A49CA32E6 /* AppIconDark@3x.png */; };
+		417C66C5E688B6491032C98B /* AppIconDark@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 06E8EAE158AE32C4598DE402 /* AppIconDark@2x.png */; };
 		5CC2CA245FBD44BBA03C92CA /* Syne-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C017470E370F46EBA1F3171B /* Syne-ExtraBold.ttf */; };
+		6243FE1D4A4343F582F8AEBF8208EF33 /* ShazamKitRecognition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16A9E577909248BBBA2DCCD350A1103F /* ShazamKitRecognition.swift */; };
 		6437FA7A39AD45FDB956E9A8 /* DMSans-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 743490587D324D0C85431F8E /* DMSans-Medium.ttf */; };
 		6635A0F25F794940B7E30401 /* Syne-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 35697ACDCE084995931C5D72 /* Syne-SemiBold.ttf */; };
 		668E9CD3C705482AB2A229B1 /* Syne-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A89363CF08C142C0B459297C /* Syne-Medium.ttf */; };
 		7699B88040F8A987B510C191 /* libPods-Resonate-ResonateTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 19F6CBCC0A4E27FBF8BF4A61 /* libPods-Resonate-ResonateTests.a */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		9B3EE44F6DF64621A99F026A /* DMSans-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 36DC1C52A44B46CEBCB965FA /* DMSans-Regular.ttf */; };
+		DE7AA518A39B406A89608374AD4E2BD1 /* ShazamKitRecognitionBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = EF7CDE96B61543948EC67ED104FCD331 /* ShazamKitRecognitionBridge.m */; };
+		E5D553DE12555378A14F6A45 /* AppIconModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB66453AF7701AB961738DCC /* AppIconModule.swift */; };
 		EC8261BAF4AB45FF9347D6B3 /* DMSans-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DD4A5B0647714CFCA438076E /* DMSans-Bold.ttf */; };
 		F089D750449C478BAB5FDC5B /* Syne-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C590EB1B46C34E1794BE389F /* Syne-Bold.ttf */; };
+		FCA2CFA5DFFD9F25CFBC6E05 /* AppIconModuleBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = A2ADD47CE44A872B06CA229D /* AppIconModuleBridge.m */; };
 		FD3F849FB2424D2E9975FF58 /* Syne-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = BB133B1A5D4A4AE09B254148 /* Syne-Regular.ttf */; };
 /* End PBXBuildFile section */
 
@@ -38,28 +44,34 @@
 		00E356EE1AD99517003FC87E /* ResonateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ResonateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		00E356F11AD99517003FC87E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		00E356F21AD99517003FC87E /* ResonateTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ResonateTests.m; sourceTree = "<group>"; };
+		06E8EAE158AE32C4598DE402 /* AppIconDark@2x.png */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = image.png; name = "AppIconDark@2x.png"; path = "Resonate/AppIconDark@2x.png"; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* Resonate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Resonate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FAF1A68108700A75B9A /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AppDelegate.h; path = Resonate/AppDelegate.h; sourceTree = "<group>"; };
 		13B07FB01A68108700A75B9A /* AppDelegate.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = AppDelegate.mm; path = Resonate/AppDelegate.mm; sourceTree = "<group>"; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Resonate/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Resonate/Info.plist; sourceTree = "<group>"; };
 		13B07FB71A68108700A75B9A /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = Resonate/main.m; sourceTree = "<group>"; };
+		16A9E577909248BBBA2DCCD350A1103F /* ShazamKitRecognition.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ShazamKitRecognition.swift; path = Resonate/ShazamKitRecognition.swift; sourceTree = "<group>"; };
 		19F6CBCC0A4E27FBF8BF4A61 /* libPods-Resonate-ResonateTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Resonate-ResonateTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		35697ACDCE084995931C5D72 /* Syne-SemiBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Syne-SemiBold.ttf"; path = "../assets/fonts/Syne-SemiBold.ttf"; sourceTree = "<group>"; };
-		36DC1C52A44B46CEBCB965FA /* DMSans-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "DMSans-Regular.ttf"; path = "../assets/fonts/DMSans-Regular.ttf"; sourceTree = "<group>"; };
+		35697ACDCE084995931C5D72 /* Syne-SemiBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Syne-SemiBold.ttf"; path = "../assets/fonts/Syne-SemiBold.ttf"; sourceTree = "<group>"; };
+		36DC1C52A44B46CEBCB965FA /* DMSans-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "DMSans-Regular.ttf"; path = "../assets/fonts/DMSans-Regular.ttf"; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-Resonate.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Resonate.debug.xcconfig"; path = "Target Support Files/Pods-Resonate/Pods-Resonate.debug.xcconfig"; sourceTree = "<group>"; };
+		52D0BD8C63A7865A49CA32E6 /* AppIconDark@3x.png */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = image.png; name = "AppIconDark@3x.png"; path = "Resonate/AppIconDark@3x.png"; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-Resonate.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Resonate.release.xcconfig"; path = "Target Support Files/Pods-Resonate/Pods-Resonate.release.xcconfig"; sourceTree = "<group>"; };
 		5B7EB9410499542E8C5724F5 /* Pods-Resonate-ResonateTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Resonate-ResonateTests.debug.xcconfig"; path = "Target Support Files/Pods-Resonate-ResonateTests/Pods-Resonate-ResonateTests.debug.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-Resonate.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Resonate.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		743490587D324D0C85431F8E /* DMSans-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "DMSans-Medium.ttf"; path = "../assets/fonts/DMSans-Medium.ttf"; sourceTree = "<group>"; };
+		743490587D324D0C85431F8E /* DMSans-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "DMSans-Medium.ttf"; path = "../assets/fonts/DMSans-Medium.ttf"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Resonate/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		89C6BE57DB24E9ADA2F236DE /* Pods-Resonate-ResonateTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Resonate-ResonateTests.release.xcconfig"; path = "Target Support Files/Pods-Resonate-ResonateTests/Pods-Resonate-ResonateTests.release.xcconfig"; sourceTree = "<group>"; };
-		A89363CF08C142C0B459297C /* Syne-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Syne-Medium.ttf"; path = "../assets/fonts/Syne-Medium.ttf"; sourceTree = "<group>"; };
-		BB133B1A5D4A4AE09B254148 /* Syne-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Syne-Regular.ttf"; path = "../assets/fonts/Syne-Regular.ttf"; sourceTree = "<group>"; };
-		C017470E370F46EBA1F3171B /* Syne-ExtraBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Syne-ExtraBold.ttf"; path = "../assets/fonts/Syne-ExtraBold.ttf"; sourceTree = "<group>"; };
-		C590EB1B46C34E1794BE389F /* Syne-Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Syne-Bold.ttf"; path = "../assets/fonts/Syne-Bold.ttf"; sourceTree = "<group>"; };
-		DD4A5B0647714CFCA438076E /* DMSans-Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "DMSans-Bold.ttf"; path = "../assets/fonts/DMSans-Bold.ttf"; sourceTree = "<group>"; };
+		A2ADD47CE44A872B06CA229D /* AppIconModuleBridge.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = AppIconModuleBridge.m; path = Resonate/AppIconModuleBridge.m; sourceTree = "<group>"; };
+		A89363CF08C142C0B459297C /* Syne-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Syne-Medium.ttf"; path = "../assets/fonts/Syne-Medium.ttf"; sourceTree = "<group>"; };
+		BB133B1A5D4A4AE09B254148 /* Syne-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Syne-Regular.ttf"; path = "../assets/fonts/Syne-Regular.ttf"; sourceTree = "<group>"; };
+		C017470E370F46EBA1F3171B /* Syne-ExtraBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Syne-ExtraBold.ttf"; path = "../assets/fonts/Syne-ExtraBold.ttf"; sourceTree = "<group>"; };
+		C590EB1B46C34E1794BE389F /* Syne-Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Syne-Bold.ttf"; path = "../assets/fonts/Syne-Bold.ttf"; sourceTree = "<group>"; };
+		CB66453AF7701AB961738DCC /* AppIconModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AppIconModule.swift; path = Resonate/AppIconModule.swift; sourceTree = "<group>"; };
+		DD4A5B0647714CFCA438076E /* DMSans-Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "DMSans-Bold.ttf"; path = "../assets/fonts/DMSans-Bold.ttf"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		EF7CDE96B61543948EC67ED104FCD331 /* ShazamKitRecognitionBridge.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = ShazamKitRecognitionBridge.m; path = Resonate/ShazamKitRecognitionBridge.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -108,6 +120,12 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB71A68108700A75B9A /* main.m */,
+				CB66453AF7701AB961738DCC /* AppIconModule.swift */,
+				A2ADD47CE44A872B06CA229D /* AppIconModuleBridge.m */,
+				16A9E577909248BBBA2DCCD350A1103F /* ShazamKitRecognition.swift */,
+				EF7CDE96B61543948EC67ED104FCD331 /* ShazamKitRecognitionBridge.m */,
+				06E8EAE158AE32C4598DE402 /* AppIconDark@2x.png */,
+				52D0BD8C63A7865A49CA32E6 /* AppIconDark@3x.png */,
 			);
 			name = Resonate;
 			sourceTree = "<group>";
@@ -135,7 +153,6 @@
 				A89363CF08C142C0B459297C /* Syne-Medium.ttf */,
 			);
 			name = Resources;
-			path = "";
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -232,7 +249,8 @@
 		83CBB9F71A601CBA00E9B192 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 1210;
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					00E356ED1AD99517003FC87E = {
 						CreatedOnToolsVersion = 6.2;
@@ -284,6 +302,8 @@
 				F089D750449C478BAB5FDC5B /* Syne-Bold.ttf in Resources */,
 				6635A0F25F794940B7E30401 /* Syne-SemiBold.ttf in Resources */,
 				668E9CD3C705482AB2A229B1 /* Syne-Medium.ttf in Resources */,
+				417C66C5E688B6491032C98B /* AppIconDark@2x.png in Resources */,
+				2A01D5AF06A3606692F14E38 /* AppIconDark@3x.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -301,6 +321,9 @@
 			);
 			name = "Bundle React Native code and images";
 			outputPaths = (
+				"$(CONFIGURATION_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/ip.txt",
+				"$(CONFIGURATION_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/main.jsbundle",
+				"$(CONFIGURATION_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/assets",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -435,6 +458,10 @@
 			files = (
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
+				E5D553DE12555378A14F6A45 /* AppIconModule.swift in Sources */,
+				FCA2CFA5DFFD9F25CFBC6E05 /* AppIconModuleBridge.m in Sources */,
+				6243FE1D4A4343F582F8AEBF8208EF33 /* ShazamKitRecognition.swift in Sources */,
+				DE7AA518A39B406A89608374AD4E2BD1 /* ShazamKitRecognitionBridge.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -459,7 +486,7 @@
 					"$(inherited)",
 				);
 				INFOPLIST_FILE = ResonateTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -467,10 +494,9 @@
 				);
 				OTHER_LDFLAGS = (
 					"-ObjC",
-					"-lc++",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.eshaane.resonate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Resonate.app/Resonate";
 			};
@@ -483,7 +509,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COPY_PHASE_STRIP = NO;
 				INFOPLIST_FILE = ResonateTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -491,10 +517,9 @@
 				);
 				OTHER_LDFLAGS = (
 					"-ObjC",
-					"-lc++",
 					"$(inherited)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.eshaane.resonate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Resonate.app/Resonate";
 			};
@@ -506,9 +531,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = T92VK6D8QJ;
 				ENABLE_BITCODE = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Resonate/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -517,10 +549,12 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
-					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.eshaane.resonate;
 				PRODUCT_NAME = Resonate;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = Resonate;
+				SWIFT_OBJC_BRIDGING_HEADER = "Resonate/Resonate-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -533,8 +567,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = T92VK6D8QJ;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Resonate/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -543,10 +584,12 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
-					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.eshaane.resonate;
 				PRODUCT_NAME = Resonate;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = Resonate;
+				SWIFT_OBJC_BRIDGING_HEADER = "Resonate/Resonate-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
@@ -585,6 +628,7 @@
 				COPY_PHASE_STRIP = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = i386;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -601,7 +645,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",
@@ -624,10 +668,18 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-Wl",
-					"-ld_classic",
+					"-Wl",
+					"-Wl",
+					"-Wl",
+					"-Wl",
+					"-Wl",
+					"-Wl",
+					"-Wl",
+					"-Wl",
 				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				USE_HERMES = true;
 			};
 			name = Debug;
@@ -665,6 +717,7 @@
 				COPY_PHASE_STRIP = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = i386;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -674,7 +727,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",
@@ -696,10 +749,19 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-Wl",
-					"-ld_classic",
+					"-Wl",
+					"-Wl",
+					"-Wl",
+					"-Wl",
+					"-Wl",
+					"-Wl",
+					"-Wl",
+					"-Wl",
 				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
 				USE_HERMES = true;
 				VALIDATE_PRODUCT = YES;
 			};

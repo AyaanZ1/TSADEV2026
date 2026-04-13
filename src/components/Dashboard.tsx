@@ -3,6 +3,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Animated,
     Easing,
+    Image,
+    NativeEventEmitter,
+    NativeModules,
     PanResponder,
     Platform,
     SafeAreaView,
@@ -12,6 +15,11 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+
+// ShazamKit amplitude events — waveform feedback during listening
+const shazamEmitter = Platform.OS === 'ios' && NativeModules.ShazamKitRecognition
+    ? new NativeEventEmitter(NativeModules.ShazamKitRecognition)
+    : null;
 import {
     BoltIcon,
     ChartBarIcon,
@@ -31,6 +39,7 @@ import { AudioService } from '../services/AudioService';
 import { HapticEngine } from '../services/HapticEngine';
 import { MusicRecognitionService, RecognitionResult } from '../services/MusicRecognitionService';
 import { LRCLIBService, LRCLine } from '../services/LRCLIBService';
+import AppIcon, { AppIconName } from '../NativeModules/AppIconModule';
 import { LyricSyncEngine } from '../services/LyricSyncEngine';
 
 type ThemeMode = 'dark' | 'light' | 'amoled';
@@ -67,6 +76,14 @@ const getPalette = (theme: ThemeMode): Palette => {
     isAmoled,
   };
 };
+
+const getLyricRowHeight = (size: 'S' | 'M' | 'L' | 'XL') => {
+  const base = size === 'XL' ? 30 : size === 'L' ? 26 : size === 'M' ? 22 : 18;
+  return Math.round(base * 1.25 + 10);
+};
+
+const LYRIC_SCROLL_PADDING_TOP = 10;
+const LYRIC_ACTIVE_LINE_OFFSET = 56;
 
 // Glow orb using SVG radial gradient for smooth falloff
 const GlowOrb = ({
@@ -134,7 +151,7 @@ const MarqueeText = ({ text, textStyle, forceScroll }: { text: string; textStyle
   }, [shouldScroll, textW]);
 
   return (
-    <View style={{ overflow: 'hidden' }} onLayout={e => setContainerW(e.nativeEvent.layout.width)}>
+    <View style={{ overflow: 'hidden', width: '100%' }} onLayout={e => setContainerW(e.nativeEvent.layout.width)}>
       {/* Horizontal ScrollView lets Text render at its natural single-line width for measurement */}
       <ScrollView
         horizontal
@@ -158,24 +175,35 @@ const MarqueeText = ({ text, textStyle, forceScroll }: { text: string; textStyle
   );
 };
 
-// SVG Waveform
+// SVG Waveform — each of the 4 waves is driven by its own frequency band.
+// bandsRef.current = [bass, lowMid, highMid, treble], each 0-100.
+// Written by the AudioService listener every ~33 ms; read here each frame
+// without triggering a Dashboard re-render.
 const SvgWaveform = ({
   active,
-  intensity,
+  bandsRef,
   palette,
 }: {
   active: boolean;
-  intensity: number;
+  bandsRef: React.MutableRefObject<[number, number, number, number]>;
   palette: Palette;
 }) => {
-  const timeRef = useRef(0);
+  // Per-wave time accumulators so each band evolves at its own speed
+  const timesRef = useRef<[number, number, number, number]>([0, 0, 0, 0]);
   const [, forceUpdate] = useState(0);
   const [w, setW] = useState(0);
   const h = 160;
 
+  // Time-step per wave: bass is slow/wide, treble is fast/tight
+  const TIME_STEPS: [number, number, number, number] = [0.016, 0.022, 0.030, 0.040];
+  const IDLE_STEP = 0.006;
+
   useEffect(() => {
     const interval = setInterval(() => {
-      timeRef.current += active ? 0.025 : 0.008;
+      const t = timesRef.current;
+      for (let i = 0; i < 4; i++) {
+        t[i] += active ? TIME_STEPS[i] : IDLE_STEP;
+      }
       forceUpdate(n => n + 1);
     }, 33);
     return () => clearInterval(interval);
@@ -184,16 +212,22 @@ const SvgWaveform = ({
   const colors = [palette.coral, palette.violet, palette.cyan, palette.gold];
 
   const makePath = (i: number): string => {
-    const t = timeRef.current;
-    const amp = active ? (h * 0.12 + i * 8) * (intensity / 100) : h * 0.03;
-    const freq = 0.008 + i * 0.003;
-    const phase = t * (1.2 + i * 0.4);
+    const t = timesRef.current[i];
+    // Band value 0-100; idle uses a gentle fixed level
+    const bandVal = active ? bandsRef.current[i] : 0;
+    // Wave 0 (bass) is tallest; each subsequent wave is slightly shorter at same energy
+    const maxAmp = h * (0.13 - i * 0.015);
+    const amp = active ? maxAmp * Math.max(bandVal / 100, 0.08) : h * 0.025;
+    // Spatial frequency: bass is wide/slow, treble is narrow/fast
+    const freq = 0.006 + i * 0.004;
+    const phase = t;
     const pts: string[] = [];
     for (let x = 0; x <= w; x += 2) {
       const y =
         h / 2 +
         Math.sin(x * freq + phase) * amp +
-        Math.sin(x * freq * 2.3 + phase * 0.7) * amp * 0.3;
+        Math.sin(x * freq * 2.1 + phase * 0.65) * amp * 0.28 +
+        Math.sin(x * freq * 3.7 + phase * 1.3) * amp * 0.10;
       pts.push(`${x === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`);
     }
     return pts.join(' ');
@@ -205,25 +239,29 @@ const SvgWaveform = ({
 
   return (
     <Svg width={w} height={h} onLayout={e => setW(e.nativeEvent.layout.width)}>
-      {/* Sine waves */}
       {([0, 1, 2, 3] as const).map(i => {
         const d = makePath(i);
         const color = colors[i];
-        const sw = active ? 2.5 - i * 0.3 : 1.2;
-        const op = active ? 0.7 - i * 0.1 : 0.25;
+        const sw = active ? 2.2 - i * 0.25 : 1.0;
+        const op = active ? 0.72 - i * 0.08 : 0.22;
         return (
           <React.Fragment key={i}>
-            {active && <Path d={d} stroke={color} strokeWidth={sw * 8} strokeOpacity={op * 0.15} fill="none" />}
+            {active && (
+              <Path d={d} stroke={color} strokeWidth={sw * 7} strokeOpacity={op * 0.14} fill="none" />
+            )}
             <Path d={d} stroke={color} strokeWidth={sw} strokeOpacity={op} fill="none" />
           </React.Fragment>
         );
       })}
-
     </Svg>
   );
 };
 
 // Listen Control
+const PILL_W = 260;
+const PILL_H = 52;
+const RIPPLE_DURATION = 1800;
+
 const ListenControl = ({
   isActive,
   isRecognized,
@@ -235,12 +273,13 @@ const ListenControl = ({
   palette: Palette;
   onPress: () => void;
 }) => {
-  const pulse = useRef(new Animated.Value(0)).current;
-  const pillWidth = useRef(new Animated.Value(isRecognized ? 52 : 260)).current;
+  const ring1 = useRef(new Animated.Value(0)).current;
+  const ring2 = useRef(new Animated.Value(0)).current;
+  const pillWidth = useRef(new Animated.Value(isRecognized ? PILL_H : PILL_W)).current;
 
   useEffect(() => {
     Animated.timing(pillWidth, {
-      toValue: isRecognized ? 52 : 260,
+      toValue: isRecognized ? PILL_H : PILL_W,
       duration: 320,
       useNativeDriver: false,
       easing: Easing.inOut(Easing.quad),
@@ -248,80 +287,103 @@ const ListenControl = ({
   }, [isRecognized]);
 
   useEffect(() => {
+    ring1.setValue(0);
+    ring2.setValue(0);
     if (!isActive || isRecognized) return undefined;
-    const loop = Animated.loop(
+
+    // Two staggered expanding rings — ring2 starts halfway through ring1's cycle
+    const loop1 = Animated.loop(
+      Animated.timing(ring1, {
+        toValue: 1,
+        duration: RIPPLE_DURATION,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+    );
+    const loop2 = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true, easing: Easing.out(Easing.quad) }),
-        Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true, easing: Easing.inOut(Easing.quad) }),
+        Animated.delay(RIPPLE_DURATION / 2),
+        Animated.timing(ring2, {
+          toValue: 1,
+          duration: RIPPLE_DURATION,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic),
+        }),
       ]),
     );
-    loop.start();
-    return () => loop.stop();
-  }, [isActive, isRecognized, pulse]);
+    loop1.start();
+    loop2.start();
+    return () => { loop1.stop(); loop2.stop(); };
+  }, [isActive, isRecognized]);
+
+  const ringStyle = (anim: Animated.Value) => ({
+    position: 'absolute' as const,
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: palette.violet,
+    transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.28] }) }],
+    opacity: anim.interpolate({ inputRange: [0, 0.12, 0.7, 1], outputRange: [0, 0.7, 0.35, 0] }),
+  });
 
   const label = isActive ? 'Listening' : 'Start Listening';
   const sub = isActive ? 'Identifying audio...' : 'Tap to recognize';
 
   return (
     <View style={{ alignItems: 'center', marginBottom: 14, marginTop: 8 }}>
-      {isActive && !isRecognized && (
-        <Animated.View
-          style={{
-            position: 'absolute',
-            width: 260,
-            height: 74,
-            borderRadius: 999,
-            borderWidth: 1.5,
-            borderColor: `${palette.violet}55`,
-            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.14] }) }],
-            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.8, 0] }),
-          }}
-        />
-      )}
-      <Animated.View style={{ width: pillWidth, overflow: 'hidden' }}>
-        <TouchableOpacity
-          onPress={onPress}
-          activeOpacity={0.85}
-          style={{
-            width: isRecognized ? 52 : 260,
-            height: 52,
-            borderRadius: isRecognized ? 26 : 999,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: isRecognized ? 'center' : 'flex-start',
-            paddingHorizontal: isRecognized ? 0 : 6,
-            paddingRight: isRecognized ? 0 : 22,
-            borderWidth: 1.5,
-            borderColor: isActive ? `${palette.coral}88` : palette.surfaceBorder,
-            backgroundColor: isRecognized ? palette.coral : palette.surface,
-          }}
-        >
-          {isRecognized ? (
-            <StopIcon size={20} color="#fff" strokeWidth={2} />
-          ) : (
-            <>
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: isActive ? palette.violet : `${palette.violet}99`,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  marginRight: 12,
-                }}
-              >
-                <MicrophoneIcon size={18} color="#fff" strokeWidth={2} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: palette.text, fontSize: 15, fontWeight: '700', fontFamily: 'Syne-Bold' }}>{label}</Text>
-                <Text style={{ color: palette.textSub, fontSize: 11, marginTop: 1, fontFamily: 'DMSans-Regular' }}>{sub}</Text>
-              </View>
-              {isActive && <Text style={{ color: palette.violet, fontWeight: '700' }}>•••</Text>}
-            </>
-          )}
-        </TouchableOpacity>
-      </Animated.View>
+      {/* Fixed bounding box so rings always align to pill shape */}
+      <View style={{ width: PILL_W, height: PILL_H, alignItems: 'center', justifyContent: 'center' }}>
+        {isActive && !isRecognized && (
+          <>
+            <Animated.View pointerEvents="none" style={ringStyle(ring1)} />
+            <Animated.View pointerEvents="none" style={ringStyle(ring2)} />
+          </>
+        )}
+        <Animated.View style={{ width: pillWidth, height: PILL_H, overflow: 'hidden', borderRadius: 999 }}>
+          <TouchableOpacity
+            onPress={onPress}
+            activeOpacity={0.82}
+            style={{
+              width: isRecognized ? PILL_H : PILL_W,
+              height: PILL_H,
+              borderRadius: isRecognized ? PILL_H / 2 : 999,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: isRecognized ? 'center' : 'flex-start',
+              paddingHorizontal: isRecognized ? 0 : 6,
+              paddingRight: isRecognized ? 0 : 22,
+              borderWidth: 1.5,
+              borderColor: isActive ? `${palette.coral}88` : palette.surfaceBorder,
+              backgroundColor: isRecognized ? palette.coral : palette.surface,
+            }}
+          >
+            {isRecognized ? (
+              <StopIcon size={20} color="#fff" strokeWidth={2} />
+            ) : (
+              <>
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: isActive ? palette.violet : `${palette.violet}99`,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: 12,
+                  }}
+                >
+                  <MicrophoneIcon size={18} color="#fff" strokeWidth={2} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: palette.text, fontSize: 15, fontWeight: '700', fontFamily: 'Syne-Bold' }}>{label}</Text>
+                  <Text style={{ color: palette.textSub, fontSize: 11, marginTop: 1, fontFamily: 'DMSans-Regular' }}>{sub}</Text>
+                </View>
+                {isActive && <Text style={{ color: palette.violet, fontWeight: '700' }}>•••</Text>}
+              </>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
     </View>
   );
 };
@@ -333,41 +395,49 @@ const LyricLine = ({
   isPast,
   palette,
   size,
+  onLayout,
 }: {
   text: string;
   isActive: boolean;
   isPast: boolean;
   palette: Palette;
   size: 'S' | 'M' | 'L' | 'XL';
+  onLayout?: (y: number) => void;
 }) => {
   const base = size === 'XL' ? 30 : size === 'L' ? 26 : size === 'M' ? 22 : 18;
   const targetOpacity = isActive ? 1 : isPast ? 0.22 : 0.42;
-  const targetScale = isActive ? 1 : 0.93;
   const opacity = useRef(new Animated.Value(targetOpacity)).current;
-  const scale = useRef(new Animated.Value(targetScale)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(opacity, { toValue: targetOpacity, duration: 380, useNativeDriver: true, easing: Easing.inOut(Easing.quad) }),
-      Animated.timing(scale, { toValue: targetScale, duration: 380, useNativeDriver: true, easing: Easing.inOut(Easing.quad) }),
     ]).start();
   }, [isActive, isPast]);
 
   return (
-    <Animated.Text
+    <View
+      onLayout={e => onLayout?.(e.nativeEvent.layout.y)}
       style={{
-        fontSize: isActive ? base : base - 4,
-        fontFamily: isActive ? 'Syne-ExtraBold' : 'Syne-Regular',
-        fontWeight: isActive ? '800' : '400',
-        color: palette.text,
-        paddingVertical: 5,
-        lineHeight: isActive ? base * 1.25 : (base - 4) * 1.3,
-        opacity,
-        transform: [{ scale }],
+        paddingTop: 8,
+        paddingBottom: 8,
+        paddingRight: 6,
       }}
     >
-      {text}
-    </Animated.Text>
+      <Animated.Text
+        style={{
+          fontSize: base,
+          fontFamily: isActive ? 'Syne-Bold' : 'Syne-Regular',
+          fontWeight: isActive ? '700' : '400',
+          color: palette.text,
+          lineHeight: Math.round(base * 1.36),
+          opacity,
+          textShadowColor: isActive ? `${palette.coral}33` : 'transparent',
+          textShadowRadius: isActive ? 10 : 0,
+        }}
+      >
+        {text}
+      </Animated.Text>
+    </View>
   );
 };
 
@@ -389,19 +459,32 @@ const CustomSlider = ({
   color: string;
   palette: Palette;
 }) => {
-  const [trackWidth, setTrackWidth] = useState(1);
-  const updateValue = (x: number) => {
-    const ratio = Math.min(1, Math.max(0, x / trackWidth));
-    onChange(Math.round(min + ratio * (max - min)));
-  };
+  // Use refs for everything so panResponder is created once and never goes stale
+  const trackRef = useRef<View>(null);
+  const trackPageXRef = useRef(0);
+  const trackWidthRef = useRef(1);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const minRef = useRef(min);
+  minRef.current = min;
+  const maxRef = useRef(max);
+  maxRef.current = max;
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: evt => updateValue(evt.nativeEvent.locationX),
-        onPanResponderMove: evt => updateValue(evt.nativeEvent.locationX),
+        onPanResponderGrant: (_evt, gs) => {
+          const ratio = Math.min(1, Math.max(0, (gs.x0 - trackPageXRef.current) / trackWidthRef.current));
+          onChangeRef.current(Math.round(minRef.current + ratio * (maxRef.current - minRef.current)));
+        },
+        onPanResponderMove: (_evt, gs) => {
+          const ratio = Math.min(1, Math.max(0, (gs.moveX - trackPageXRef.current) / trackWidthRef.current));
+          onChangeRef.current(Math.round(minRef.current + ratio * (maxRef.current - minRef.current)));
+        },
       }),
-    [trackWidth, min, max],
+    [],
   );
 
   const pct = ((value - min) / (max - min)) * 100;
@@ -412,8 +495,14 @@ const CustomSlider = ({
         <Text style={{ color, fontWeight: '700', fontSize: 13, fontFamily: 'DMSans-Bold' }}>{value}%</Text>
       </View>
       <View
+        ref={trackRef}
         {...panResponder.panHandlers}
-        onLayout={evt => setTrackWidth(evt.nativeEvent.layout.width)}
+        onLayout={() => {
+          trackRef.current?.measure((_x, _y, width, _h, pageX) => {
+            trackPageXRef.current = pageX;
+            trackWidthRef.current = width;
+          });
+        }}
         style={{ height: 10, borderRadius: 6, backgroundColor: palette.isDark ? 'rgba(255,255,255,0.09)' : 'rgba(26,26,46,0.09)', marginTop: 10 }}
       >
         <View style={{ width: `${pct}%`, height: 10, borderRadius: 6, backgroundColor: color }}>
@@ -507,7 +596,6 @@ const GlassCard = ({
 // Main Dashboard
 export const Dashboard = () => {
   const [theme, setTheme] = useState<ThemeMode>('dark');
-  const [showSplash, setShowSplash] = useState(true);
   const [tab, setTab] = useState<Tab>('listen');
   const [isListening, setIsListening] = useState(false);
   const [recognized, setRecognized] = useState(false);
@@ -519,10 +607,16 @@ export const Dashboard = () => {
   const [fontSize, setFontSize] = useState<'S' | 'M' | 'L' | 'XL'>('M');
   const [elapsed, setElapsed] = useState(0);
   const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [activeIcon, setActiveIcon] = useState<AppIconName>('default');
+
+  useEffect(() => {
+    AppIcon.getIcon().then(name => setActiveIcon(name));
+  }, []);
 
   // Song data from recognition
   const [songTitle, setSongTitle] = useState('');
   const [songArtist, setSongArtist] = useState('');
+  const [artworkURL, setArtworkURL] = useState('');
   const [matchOffset, setMatchOffset] = useState(0);
 
   // Lyrics pipeline state
@@ -533,8 +627,15 @@ export const Dashboard = () => {
   const [lyricsStatus, setLyricsStatus] = useState<LyricsStatus>('idle');
   const [recognitionError, setRecognitionError] = useState<string | null>(null);
 
-  const splashOpacity = useRef(new Animated.Value(1)).current;
   const breathe = useRef(new Animated.Value(1)).current;
+  // Live mic band energies (0–100 each: bass, lowMid, highMid, treble).
+  // Written by AudioService listener; read by SvgWaveform each frame — avoids
+  // re-rendering Dashboard on every audio tick.
+  const micBandsRef = useRef<[number, number, number, number]>([30, 22, 18, 12]);
+
+  // ShazamKit diagnostic state — shown during listening to diagnose recognition issues
+  const [sigCount, setSigCount] = useState(0);
+  const [shazamError, setShazamError] = useState('');
 
   // Refs for async flow control
   const isListeningRef = useRef(false);
@@ -543,6 +644,7 @@ export const Dashboard = () => {
   const syncEngineRef = useRef(new LyricSyncEngine());
   const abortControllerRef = useRef<AbortController | null>(null);
   const lyricScrollRef = useRef<ScrollView>(null);
+  const lyricLineOffsetsRef = useRef<Record<number, number>>({});
 
   const palette = getPalette(theme);
 
@@ -557,25 +659,47 @@ export const Dashboard = () => {
     return () => loop.stop();
   }, [breathe]);
 
+  // Drive waveform with real mic amplitude during the listening phase (before recognition)
   useEffect(() => {
-    const fade = setTimeout(() => {
-      Animated.timing(splashOpacity, { toValue: 0, duration: 700, useNativeDriver: true }).start(() =>
-        setShowSplash(false),
-      );
-    }, 1650);
-    return () => clearTimeout(fade);
-  }, [splashOpacity]);
+    if (!isListening || !shazamEmitter) return undefined;
+    setSigCount(0);
+    setShazamError('');
+    const sub = shazamEmitter.addListener('shazamAmplitude', (data: { amplitude: number, sigs?: number, error?: string }) => {
+      if (data.amplitude >= 0) {
+        const a = data.amplitude * 100;
+        const r = micBandsRef.current;
+        r[0] = r[0] * 0.5 + a * 0.85 * 0.5;
+        r[1] = r[1] * 0.5 + a * 0.70 * 0.5;
+        r[2] = r[2] * 0.5 + a * 0.55 * 0.5;
+        r[3] = r[3] * 0.5 + a * 0.40 * 0.5;
+      }
+      if (data.sigs !== undefined) setSigCount(data.sigs);
+      if (data.error) setShazamError(data.error);
+    });
+    return () => {
+      sub.remove();
+      micBandsRef.current = [30, 22, 18, 12];
+    };
+  }, [isListening]);
 
-  // Rhythm-synced haptics: runs while a song is recognized, mic stays open
+  // Rhythm-synced haptics + live waveform bands: runs while a song is recognized
   useEffect(() => {
     if (!recognized) return undefined;
     const listener = AudioService.addListener(data => {
+      // Per-band EMA smoothing — bass responds slower, treble faster
+      const b = data.bands;
+      const r = micBandsRef.current;
+      r[0] = r[0] * 0.62 + b[0] * 100 * 0.38; // bass
+      r[1] = r[1] * 0.58 + b[1] * 100 * 0.42; // low-mid
+      r[2] = r[2] * 0.54 + b[2] * 100 * 0.46; // high-mid
+      r[3] = r[3] * 0.48 + b[3] * 100 * 0.52; // treble — most responsive
       HapticEngine.processAudioFrame(data.amplitude, data.frequency);
     });
     return () => {
       listener.remove();
       AudioService.stop();
       HapticEngine.reset();
+      micBandsRef.current = [30, 22, 18, 12];
     };
   }, [recognized]);
 
@@ -589,8 +713,9 @@ export const Dashboard = () => {
   // Auto-scroll lyrics to the active line
   useEffect(() => {
     if (currentLyricIndex < 0 || !lyricScrollRef.current || lyricsStatus !== 'synced') return;
-    const lineH = fontSize === 'XL' ? 42 : fontSize === 'L' ? 36 : fontSize === 'M' ? 30 : 24;
-    const target = Math.max(0, currentLyricIndex * lineH - 80);
+    const measuredOffset = lyricLineOffsetsRef.current[currentLyricIndex];
+    const fallbackOffset = currentLyricIndex * getLyricRowHeight(fontSize);
+    const target = Math.max(0, (measuredOffset ?? fallbackOffset) - LYRIC_ACTIVE_LINE_OFFSET);
     lyricScrollRef.current.scrollTo({ y: target, animated: true });
   }, [currentLyricIndex, fontSize, lyricsStatus]);
 
@@ -616,6 +741,7 @@ export const Dashboard = () => {
       if (controller.signal.aborted) return;
 
       if (data.syncedLyrics && data.syncedLyrics.length > 0) {
+        lyricLineOffsetsRef.current = {};
         setSyncedLyrics(data.syncedLyrics);
         setLyricsStatus('synced');
         syncEngineRef.current.start({
@@ -652,12 +778,16 @@ export const Dashboard = () => {
       setElapsed(0);
       setSongTitle('');
       setSongArtist('');
+      setArtworkURL('');
       setMatchOffset(0);
       setSyncedLyrics([]);
+      lyricLineOffsetsRef.current = {};
       setPlainLyrics(null);
       setCurrentLyricIndex(-1);
       setLyricsStatus('idle');
       setRecognitionError(null);
+      setSigCount(0);
+      setShazamError('');
       return;
     }
 
@@ -674,6 +804,8 @@ export const Dashboard = () => {
     isListeningRef.current = true;
     setIsListening(true);
     setRecognitionError(null);
+    setSigCount(0);
+    setShazamError('');
 
     try {
       const result = await MusicRecognitionService.identify();
@@ -682,6 +814,7 @@ export const Dashboard = () => {
       // Show song info right away
       setSongTitle(result.title);
       setSongArtist(result.artist);
+      setArtworkURL(result.artworkURL);
       setMatchOffset(result.matchOffset);
       recognizedRef.current = true;
       isListeningRef.current = false;
@@ -750,8 +883,8 @@ export const Dashboard = () => {
               {/* Waveform */}
               <GlassCard palette={palette} style={{ height: 160, flexShrink: 0, overflow: 'hidden', marginBottom: 16, padding: 0 }}>
                 <SvgWaveform
-                  active={recognized}
-                  intensity={Math.round((intensity + bassBoost + trebleBoost) / 3)}
+                  active={isListening || recognized}
+                  bandsRef={micBandsRef}
                   palette={palette}
                 />
                 {recognized && (
@@ -775,6 +908,16 @@ export const Dashboard = () => {
               {!recognized && (
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 80 }}>
                   <ListenControl isActive={isListening} isRecognized={false} palette={palette} onPress={handleListen} />
+                  {isListening && sigCount > 0 && !shazamError && (
+                    <Text style={{ color: palette.textSub, fontSize: 12, fontFamily: 'DMSans-Regular', marginTop: 10 }}>
+                      {sigCount} {sigCount === 1 ? 'signature' : 'signatures'} checked
+                    </Text>
+                  )}
+                  {isListening && shazamError ? (
+                    <Text style={{ color: palette.coral, fontSize: 12, fontFamily: 'DMSans-Regular', marginTop: 10, textAlign: 'center', paddingHorizontal: 24 }}>
+                      {shazamError}
+                    </Text>
+                  ) : null}
                   {recognitionError && (
                     <Text style={{ color: palette.coral, fontSize: 13, fontFamily: 'DMSans-Regular', marginTop: 12 }}>
                       {recognitionError}
@@ -783,39 +926,57 @@ export const Dashboard = () => {
                 </View>
               )}
 
-              {/* Post-recognition: stop circle + marquee + lyrics */}
+              {/* Post-recognition: artwork + title/artist + stop */}
               {recognized && (
                 <View style={{ flex: 1, flexDirection: 'column' }}>
-                  {/* Stop circle + song info row */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, flexShrink: 0 }}>
+                    {/* Album art */}
+                    {artworkURL ? (
+                      <Image
+                        source={{ uri: artworkURL }}
+                        style={{
+                          width: 64, height: 64, borderRadius: 10, marginRight: 12, flexShrink: 0,
+                          backgroundColor: palette.surface,
+                        }}
+                      />
+                    ) : (
+                      <View style={{
+                        width: 64, height: 64, borderRadius: 10, marginRight: 12, flexShrink: 0,
+                        backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.surfaceBorder,
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <MusicalNoteIcon size={26} color={palette.textSub} />
+                      </View>
+                    )}
+                    {/* Title + artist */}
+                    <View style={{ flex: 1, minWidth: 0, paddingRight: 2 }}>
+                      <MarqueeText
+                        text={songTitle}
+                        textStyle={{ fontFamily: 'Syne-ExtraBold', fontWeight: '800', fontSize: 17, color: palette.text }}
+                      />
+                      <Text style={{ fontSize: 13, color: palette.textSub, fontFamily: 'DMSans-Regular', marginTop: 3 }} numberOfLines={1}>
+                        {songArtist}
+                      </Text>
+                    </View>
+                    {/* Stop button */}
                     <TouchableOpacity
                       onPress={handleListen}
                       activeOpacity={0.85}
                       style={{
-                        width: 44, height: 44, borderRadius: 22, flexShrink: 0,
+                        width: 40, height: 40, borderRadius: 20, flexShrink: 0,
                         backgroundColor: palette.coral,
                         alignItems: 'center', justifyContent: 'center',
-                        marginRight: 14,
+                        marginLeft: 10,
                         shadowColor: palette.coral, shadowOpacity: 0.45, shadowRadius: 12, shadowOffset: { width: 0, height: 0 },
                       }}
                     >
-                      <StopIcon size={14} color="#fff" strokeWidth={0} fill="#fff" />
+                      <StopIcon size={13} color="#fff" strokeWidth={0} fill="#fff" />
                     </TouchableOpacity>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <MarqueeText
-                        text={songTitle}
-                        textStyle={{ fontFamily: 'Syne-ExtraBold', fontWeight: '800', fontSize: 18, color: palette.text }}
-                        forceScroll
-                      />
-                      <Text style={{ fontSize: 13, color: palette.textSub, fontFamily: 'DMSans-Regular', marginTop: 2 }} numberOfLines={1}>
-                        {songArtist}
-                      </Text>
-                    </View>
                   </View>
 
                   {/* Lyrics card */}
                   <GlassCard palette={palette} style={{ flex: 1, marginBottom: 88, padding: 18 }}>
-                    <View style={[styles.rowBetween, { marginBottom: 12, flexShrink: 0 }]}>
+                    <View style={[styles.rowBetween, { marginBottom: 16, flexShrink: 0, minHeight: 30 }]}>
                       <Text style={{ color: palette.violet, fontSize: 11, fontFamily: 'DMSans-Bold', fontWeight: '700', letterSpacing: 1 }}>
                         RESOLYRIC
                       </Text>
@@ -838,9 +999,27 @@ export const Dashboard = () => {
                     )}
 
                     {lyricsStatus === 'synced' && (
-                      <ScrollView ref={lyricScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                      <ScrollView
+                        ref={lyricScrollRef}
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{
+                          paddingTop: LYRIC_SCROLL_PADDING_TOP,
+                          paddingBottom: Math.max(getLyricRowHeight(fontSize) * 2, LYRIC_ACTIVE_LINE_OFFSET),
+                        }}
+                        showsVerticalScrollIndicator={false}
+                      >
                         {syncedLyrics.map((line, i) => (
-                          <LyricLine key={i} text={line.text} isActive={i === currentLyricIndex} isPast={i < currentLyricIndex} palette={palette} size={fontSize} />
+                          <LyricLine
+                            key={i}
+                            text={line.text}
+                            isActive={i === currentLyricIndex}
+                            isPast={i < currentLyricIndex}
+                            palette={palette}
+                            size={fontSize}
+                            onLayout={y => {
+                              lyricLineOffsetsRef.current[i] = y;
+                            }}
+                          />
                         ))}
                       </ScrollView>
                     )}
@@ -969,6 +1148,38 @@ export const Dashboard = () => {
               </GlassCard>
 
               <GlassCard palette={palette} style={{ padding: 20 }}>
+                <Text style={{ color: palette.gold, fontSize: 11, fontFamily: 'DMSans-Bold', fontWeight: '700', letterSpacing: 1, marginBottom: 12 }}>APP ICON</Text>
+                <View style={{ flexDirection: 'row' }}>
+                  {[
+                    { key: 'default' as AppIconName, label: 'Light', bg: '#FFF8F0', border: 'rgba(0,0,0,0.08)' },
+                    { key: 'AppIconDark' as AppIconName, label: 'Dark', bg: '#000000', border: 'rgba(255,255,255,0.08)' },
+                  ].map((opt, idx) => {
+                    const selected = activeIcon === opt.key;
+                    return (
+                      <TouchableOpacity
+                        key={opt.key}
+                        onPress={() => {
+                          AppIcon.setIcon(opt.key).then(() => setActiveIcon(opt.key)).catch(() => {});
+                        }}
+                        style={{ flex: 1, marginRight: idx === 0 ? 8 : 0, borderRadius: 14, borderWidth: selected ? 2 : 1, borderColor: selected ? palette.gold : palette.surfaceBorder, padding: 10, alignItems: 'center', backgroundColor: selected ? `${palette.gold}12` : 'transparent' }}
+                      >
+                        <View style={{ width: '100%', height: 56, borderRadius: 12, backgroundColor: opt.bg, marginBottom: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: opt.border, overflow: 'hidden' }} />
+                        <Text style={{ color: selected ? palette.gold : palette.textSub, fontSize: 11, fontFamily: selected ? 'DMSans-Bold' : 'DMSans-Regular', fontWeight: selected ? '700' : '500' }}>{opt.label}</Text>
+                        {selected && (
+                          <View style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderRadius: 8, backgroundColor: palette.gold, alignItems: 'center', justifyContent: 'center' }}>
+                            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>✓</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={{ color: palette.textSub, fontSize: 10, fontFamily: 'DMSans-Regular', marginTop: 10 }}>
+                  iOS will show a confirmation when changing the icon.
+                </Text>
+              </GlassCard>
+
+              <GlassCard palette={palette} style={{ padding: 20 }}>
                 <Text style={{ color: palette.coral, fontSize: 11, fontFamily: 'DMSans-Bold', fontWeight: '700', letterSpacing: 1, marginBottom: 12 }}>APP LANGUAGE</Text>
                 {[
                   { native: 'English', english: 'English' },
@@ -1071,23 +1282,6 @@ export const Dashboard = () => {
         </View>
       </LinearGradient>
 
-        {/* Splash */}
-        {showSplash && (
-          <Animated.View
-            style={{
-              ...StyleSheet.absoluteFillObject,
-              zIndex: 20,
-              backgroundColor: palette.isAmoled ? '#000' : palette.isDark ? '#0D0D1A' : '#FFF8F0',
-              justifyContent: 'center',
-              alignItems: 'center',
-              opacity: splashOpacity,
-            }}
-          >
-            <Text style={{ color: palette.text, fontFamily: 'Syne-ExtraBold', fontWeight: '800', fontSize: 36, letterSpacing: 2 }}>RESONATE</Text>
-            <Text style={{ color: palette.textSub, marginTop: 10, fontFamily: 'DMSans-Medium', fontWeight: '600' }}>Team 28157-1</Text>
-            <Text style={{ color: `${palette.text}55`, marginTop: 4, fontSize: 11, letterSpacing: 1.5, fontFamily: 'DMSans-Regular' }}>WASHINGTON TSA 2026</Text>
-          </Animated.View>
-        )}
     </View>
   );
 };

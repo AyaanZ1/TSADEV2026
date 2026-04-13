@@ -66,5 +66,88 @@ target 'Resonate' do
       config[:reactNativePath],
       :mac_catalyst_enabled => false
     )
+
+    strip_ld_classic = lambda do |build_settings|
+      ldflags = build_settings['OTHER_LDFLAGS']
+      if ldflags.is_a?(Array)
+        build_settings['OTHER_LDFLAGS'] = ldflags.reject { |flag| flag.to_s == '-ld_classic' }
+      elsif ldflags.to_s.include?('-ld_classic')
+        build_settings['OTHER_LDFLAGS'] = ldflags.to_s.split(/\s+/).reject { |flag| flag == '-ld_classic' }.join(' ')
+      end
+    end
+
+    strip_duplicate_libcpp = lambda do |build_settings|
+      ldflags = build_settings['OTHER_LDFLAGS']
+      if ldflags.is_a?(Array)
+        build_settings['OTHER_LDFLAGS'] = ldflags.reject { |flag| flag.to_s == '-lc++' }
+      elsif ldflags.to_s.include?('-lc++')
+        build_settings['OTHER_LDFLAGS'] = ldflags.to_s.split(/\s+/).reject { |flag| flag == '-lc++' }.join(' ')
+      end
+    end
+
+    socketrocket_runloop_thread = File.join(
+      installer.sandbox.root.to_s,
+      'SocketRocket',
+      'SocketRocket',
+      'Internal',
+      'RunLoop',
+      'SRRunLoopThread.m'
+    )
+    if File.exist?(socketrocket_runloop_thread)
+      source = File.read(socketrocket_runloop_thread)
+      original = "        thread.name = @\"com.facebook.SocketRocket.NetworkThread\";\n        [thread start];"
+      patched = "        thread.name = @\"com.facebook.SocketRocket.NetworkThread\";\n        thread.qualityOfService = NSQualityOfServiceUserInteractive;\n        [thread start];"
+      if source.include?(original) && !source.include?('thread.qualityOfService = NSQualityOfServiceUserInteractive;')
+        File.write(socketrocket_runloop_thread, source.sub(original, patched))
+      end
+    end
+
+    # Xcode's C++ mode can reject '$' in identifiers used by RN codegen output.
+    # Allow it for all Pods so generated EventEmitters.cpp builds cleanly.
+    installer.pods_project.build_configurations.each do |config|
+      strip_ld_classic.call(config.build_settings)
+      strip_duplicate_libcpp.call(config.build_settings)
+    end
+
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        flags = config.build_settings['OTHER_CPLUSPLUSFLAGS']
+        if flags.nil?
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = '$(inherited) -fdollars-in-identifiers'
+        elsif flags.is_a?(Array)
+          unless flags.any? { |f| f.to_s.include?('fdollars-in-identifiers') }
+            flags << '-fdollars-in-identifiers'
+          end
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = flags
+        else
+          unless flags.to_s.include?('fdollars-in-identifiers')
+            config.build_settings['OTHER_CPLUSPLUSFLAGS'] = "#{flags} -fdollars-in-identifiers"
+          end
+        end
+
+        strip_ld_classic.call(config.build_settings)
+        strip_duplicate_libcpp.call(config.build_settings)
+      end
+    end
+
+    installer.aggregate_targets.map(&:user_project).uniq.each do |project|
+      project.build_configurations.each do |config|
+        strip_ld_classic.call(config.build_settings)
+        strip_duplicate_libcpp.call(config.build_settings)
+        config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+      end
+
+      project.targets.each do |target|
+        target.build_configurations.each do |config|
+          strip_ld_classic.call(config.build_settings)
+          strip_duplicate_libcpp.call(config.build_settings)
+          if target.name == 'Resonate'
+            config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+          end
+        end
+      end
+
+      project.save
+    end
   end
 end
