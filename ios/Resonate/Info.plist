@@ -46,8 +46,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Resonate uses your location only when needed to improve nearby audio and music recognition features.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Resonate needs the microphone to identify music and sync haptics.</string>
 	<key>UIAppFonts</key>

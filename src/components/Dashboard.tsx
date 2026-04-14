@@ -130,6 +130,10 @@ const GlowOrb = ({
   size,
   baseOpacity,
   breatheAnim,
+  bandsRef,
+  active,
+  energyIndices,
+  phase = 0,
   style,
 }: {
   id: string;
@@ -137,45 +141,113 @@ const GlowOrb = ({
   size: number;
   baseOpacity: number;
   breatheAnim: Animated.Value;
+  bandsRef: React.MutableRefObject<[number, number, number, number]>;
+  active: boolean;
+  energyIndices: number[];
+  phase?: number;
   style?: object;
-}) => (
-  <Animated.View
-    pointerEvents="none"
-    style={[
-      {position: 'absolute', width: size, height: size, opacity: breatheAnim},
-      style,
-    ]}>
-    <Svg width={size} height={size}>
-      <Defs>
-        <RadialGradient id={id} cx="50%" cy="50%" r="50%">
-          <Stop
-            offset="0%"
-            stopColor={color}
-            stopOpacity={baseOpacity * 0.55}
-          />
-          <Stop
-            offset="30%"
-            stopColor={color}
-            stopOpacity={baseOpacity * 0.28}
-          />
-          <Stop
-            offset="60%"
-            stopColor={color}
-            stopOpacity={baseOpacity * 0.09}
-          />
-          <Stop offset="100%" stopColor={color} stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Ellipse
-        cx={size / 2}
-        cy={size / 2}
-        rx={size / 2}
-        ry={size / 2}
-        fill={`url(#${id})`}
-      />
-    </Svg>
-  </Animated.View>
-);
+}) => {
+  const timeRef = useRef(phase);
+  const smoothedEnergyRef = useRef(0);
+  const [, forceUpdate] = useState(0);
+  const frameIntervalMs = active ? 50 : 110;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const bandValues = energyIndices.map(index => bandsRef.current[index] ?? 0);
+      const rawEnergy =
+        bandValues.reduce((sum, value) => sum + value, 0) /
+        Math.max(bandValues.length, 1) /
+        100;
+      const smoothing = active ? 0.16 : 0.07;
+      smoothedEnergyRef.current =
+        smoothedEnergyRef.current * (1 - smoothing) + rawEnergy * smoothing;
+      timeRef.current += active ? 0.055 : 0.022;
+      forceUpdate(n => n + 1);
+    }, frameIntervalMs);
+    return () => clearInterval(interval);
+  }, [active, bandsRef, energyIndices, frameIntervalMs]);
+
+  const t = timeRef.current;
+  const energy = smoothedEnergyRef.current;
+  const driftX = Math.sin(t * 1.15 + phase * 0.7) * (10 + energy * 18);
+  const driftY = Math.cos(t * 0.92 + phase * 1.3) * (8 + energy * 14);
+  const scale = 0.96 + energy * 0.18 + Math.sin(t * 0.85 + phase) * 0.03;
+  const mainRx = size * (0.47 + energy * 0.025);
+  const mainRy = size * (0.41 + energy * 0.04);
+  const innerRx = size * (0.31 + energy * 0.03);
+  const innerRy = size * (0.27 + energy * 0.035);
+  const streakRx = size * (0.19 + energy * 0.025);
+  const streakRy = size * (0.13 + energy * 0.018);
+  const haloOpacity = Math.min(baseOpacity * (0.7 + energy * 0.5), 1);
+  const coreOpacity = Math.min(baseOpacity * (0.5 + energy * 0.65), 1);
+  const highlightOpacity = Math.min(baseOpacity * (0.14 + energy * 0.3), 0.5);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: 'absolute',
+          width: size,
+          height: size,
+          opacity: breatheAnim,
+          transform: [
+            {translateX: driftX},
+            {translateY: driftY},
+            {scale},
+          ],
+        },
+        style,
+      ]}>
+      <Svg width={size} height={size}>
+        <Defs>
+          <RadialGradient id={`${id}-halo`} cx="50%" cy="46%" r="54%">
+            <Stop offset="0%" stopColor={color} stopOpacity={haloOpacity * 0.5} />
+            <Stop offset="28%" stopColor={color} stopOpacity={haloOpacity * 0.24} />
+            <Stop offset="62%" stopColor={color} stopOpacity={haloOpacity * 0.08} />
+            <Stop offset="100%" stopColor={color} stopOpacity={0} />
+          </RadialGradient>
+          <RadialGradient id={`${id}-core`} cx="44%" cy="38%" r="48%">
+            <Stop offset="0%" stopColor={color} stopOpacity={coreOpacity * 0.62} />
+            <Stop offset="22%" stopColor={color} stopOpacity={coreOpacity * 0.32} />
+            <Stop offset="58%" stopColor={color} stopOpacity={coreOpacity * 0.08} />
+            <Stop offset="100%" stopColor={color} stopOpacity={0} />
+          </RadialGradient>
+          <RadialGradient id={`${id}-spark`} cx="50%" cy="44%" r="44%">
+            <Stop offset="0%" stopColor="#FFFFFF" stopOpacity={highlightOpacity} />
+            <Stop offset="30%" stopColor={color} stopOpacity={highlightOpacity * 0.18} />
+            <Stop offset="100%" stopColor={color} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Ellipse
+          cx={size * 0.5}
+          cy={size * 0.52}
+          rx={mainRx}
+          ry={mainRy}
+          fill={`url(#${id}-halo)`}
+          transform={`rotate(${phase * 18} ${size * 0.5} ${size * 0.52})`}
+        />
+        <Ellipse
+          cx={size * 0.44 + Math.sin(t * 1.1 + phase) * size * 0.015}
+          cy={size * 0.4 + Math.cos(t * 0.8 + phase) * size * 0.012}
+          rx={innerRx}
+          ry={innerRy}
+          fill={`url(#${id}-core)`}
+          transform={`rotate(${-16 + phase * 12} ${size * 0.44} ${size * 0.4})`}
+        />
+        <Ellipse
+          cx={size * 0.61 + Math.cos(t * 0.95 + phase) * size * 0.018}
+          cy={size * 0.35 + Math.sin(t * 1.28 + phase) * size * 0.014}
+          rx={streakRx}
+          ry={streakRy}
+          fill={`url(#${id}-spark)`}
+          transform={`rotate(${28 - phase * 10} ${size * 0.61} ${size * 0.35})`}
+        />
+      </Svg>
+    </Animated.View>
+  );
+};
 
 // Marquee text - scrolls when text overflows container
 const MarqueeText = ({
@@ -1440,26 +1512,50 @@ export const Dashboard = () => {
       <GlowOrb
         id="glow1"
         color={palette.coral}
-        size={420}
-        baseOpacity={isListening ? 1.0 : 0.65}
+        size={460}
+        baseOpacity={isListening ? 1.0 : 0.64}
         breatheAnim={breathe}
-        style={{top: -160, right: -150}}
+        bandsRef={micBandsRef}
+        active={isListening || recognized}
+        energyIndices={[0, 1]}
+        phase={0.15}
+        style={{top: -180, right: -170}}
       />
       <GlowOrb
         id="glow2"
         color={palette.violet}
-        size={440}
-        baseOpacity={isListening ? 0.9 : 0.6}
+        size={500}
+        baseOpacity={recognized ? 0.92 : 0.58}
         breatheAnim={breathe}
-        style={{bottom: 40, left: -170}}
+        bandsRef={micBandsRef}
+        active={isListening || recognized}
+        energyIndices={[1, 2]}
+        phase={1.1}
+        style={{bottom: 28, left: -210}}
       />
       <GlowOrb
         id="glow3"
         color={palette.cyan}
-        size={360}
+        size={390}
         baseOpacity={recognized ? 0.85 : 0.55}
         breatheAnim={breathe}
-        style={{top: '35%', right: -120}}
+        bandsRef={micBandsRef}
+        active={isListening || recognized}
+        energyIndices={[2, 3]}
+        phase={2.05}
+        style={{top: '34%', right: -140}}
+      />
+      <GlowOrb
+        id="glow4"
+        color={palette.gold}
+        size={300}
+        baseOpacity={recognized ? 0.58 : 0.34}
+        breatheAnim={breathe}
+        bandsRef={micBandsRef}
+        active={isListening || recognized}
+        energyIndices={[0, 3]}
+        phase={2.9}
+        style={{bottom: 160, right: -90}}
       />
 
       <SafeAreaView style={{flex: 1, backgroundColor: 'transparent'}}>
