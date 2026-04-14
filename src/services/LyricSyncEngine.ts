@@ -7,6 +7,7 @@ const ANCHOR_BACKWARD_JITTER_DEADBAND_SEC = 0.8;
 const MAX_FORWARD_MICRO_CORRECTION_STEP_SEC = 0.45;
 const MAX_BACKWARD_MICRO_CORRECTION_STEP_SEC = 0.12;
 const BACKWARD_LINE_HYSTERESIS_SEC = 0.45;
+const LYRIC_TICK_INTERVAL_MS = 33;
 
 export class LyricSyncEngine {
   private lyrics: LRCLine[] = [];
@@ -16,6 +17,7 @@ export class LyricSyncEngine {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private callback: SyncCallback | null = null;
   private lastIndex = -1;
+  private activeIndex = -1;
   private trackId = '';
 
   start(params: {
@@ -32,10 +34,11 @@ export class LyricSyncEngine {
     this.trackId = params.trackId;
     this.callback = params.callback;
     this.lastIndex = -1;
+    this.activeIndex = -1;
     this.assistCorrection = 0;
 
-    // ~60Hz tick for smooth tracking
-    this.intervalId = setInterval(() => this.tick(), 16);
+    // 30 Hz is enough for lyric line changes and avoids a needless hot loop.
+    this.intervalId = setInterval(() => this.tick(), LYRIC_TICK_INTERVAL_MS);
   }
 
   stop() {
@@ -45,6 +48,7 @@ export class LyricSyncEngine {
     }
     this.callback = null;
     this.lastIndex = -1;
+    this.activeIndex = -1;
     this.assistCorrection = 0;
   }
 
@@ -77,6 +81,7 @@ export class LyricSyncEngine {
   updateLyrics(lyrics: LRCLine[]) {
     this.lyrics = lyrics;
     this.lastIndex = -1;
+    this.activeIndex = -1;
   }
 
   // Accept a new Shazam anchor. Small deltas just refine drift; large deltas
@@ -112,6 +117,7 @@ export class LyricSyncEngine {
 
     if (isJump) {
       this.lastIndex = -1;
+      this.activeIndex = -1;
     }
 
     return {
@@ -130,14 +136,14 @@ export class LyricSyncEngine {
     if (!this.callback || this.lyrics.length === 0) return;
 
     const pos = this.getCurrentPosition();
-    let idx = -1;
+    let idx = this.activeIndex;
 
-    // Walk backwards to find the last lyric whose timestamp we've passed
-    for (let i = this.lyrics.length - 1; i >= 0; i--) {
-      if (pos >= this.lyrics[i].time) {
-        idx = i;
-        break;
-      }
+    while (idx + 1 < this.lyrics.length && pos >= this.lyrics[idx + 1].time) {
+      idx += 1;
+    }
+
+    while (idx >= 0 && pos < this.lyrics[idx].time) {
+      idx -= 1;
     }
 
     if (
@@ -152,6 +158,7 @@ export class LyricSyncEngine {
     }
 
     if (idx !== this.lastIndex) {
+      this.activeIndex = idx;
       this.lastIndex = idx;
       this.callback(idx);
     }

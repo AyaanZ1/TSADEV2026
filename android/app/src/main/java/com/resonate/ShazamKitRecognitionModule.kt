@@ -2,9 +2,6 @@ package com.resonate
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.MediaRecorder
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.*
 import com.shazam.shazamkit.*
@@ -22,13 +19,12 @@ class ShazamKitRecognitionModule(
     override fun getName() = NAME
 
     private var streamingSession: StreamingSession? = null
-    private var audioRecord: AudioRecord? = null
+    private var subscriberId: String? = null
     private var isListening = false
     private var hasResolved = false
     private var pendingPromise: Promise? = null
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private var recordingJob: Job? = null
     private var collectionJob: Job? = null
     private var timeoutJob: Job? = null
 
@@ -39,7 +35,6 @@ class ShazamKitRecognitionModule(
             return
         }
 
-        // Check mic permission
         val hasMicPermission = ContextCompat.checkSelfPermission(
             reactContext, Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
@@ -83,19 +78,17 @@ class ShazamKitRecognitionModule(
         if (!hasResolved) {
             hasResolved = true
             pendingPromise?.reject("CANCELLED", "Recognition cancelled by user")
-            cleanup()
         }
+        cleanup()
     }
 
     private fun startListening() {
         isListening = true
 
-        // Collect match results from the streaming session
         collectionJob = scope.launch {
             streamingSession?.recognitionResults()?.collectLatest { matchResult ->
                 when (matchResult) {
                     is MatchResult.Match -> {
-                        stopListening()
                         if (!hasResolved) {
                             hasResolved = true
                             val item = matchResult.matchedMediaItems.firstOrNull()
@@ -105,8 +98,6 @@ class ShazamKitRecognitionModule(
                                     putString("artist", item.artist ?: "")
                                     putString("artworkURL", item.artworkURL?.toString() ?: "")
                                     putArray("genres", Arguments.fromList(item.genres))
-                                    // predictedCurrentMatchOffset is in seconds on Android
-                                    // (matches iOS TimeInterval convention)
                                     val offset = item.predictedCurrentMatchOffset?.toDouble() ?: 0.0
                                     putDouble("matchOffset", offset)
                                 }
@@ -114,59 +105,29 @@ class ShazamKitRecognitionModule(
                             } else {
                                 pendingPromise?.reject("NO_MATCH", "No media items found")
                             }
-                            cleanup()
+                            pendingPromise = null
                         }
                     }
-                    is MatchResult.NoMatch -> {
-                        // Keep listening until timeout or match
-                    }
-                    is MatchResult.Error -> {
-                        // Keep listening, individual errors are ok
-                    }
+                    is MatchResult.NoMatch -> { /* keep listening */ }
+                    is MatchResult.Error -> { /* keep listening */ }
                 }
             }
         }
 
-        // Record mic audio and feed it to the streaming session
-        recordingJob = scope.launch(Dispatchers.IO) {
-            val bufferSize = AudioRecord.getMinBufferSize(
-                44100,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
-            )
-
-            val recorder = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                44100,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
-            audioRecord = recorder
-
+        subscriberId = AudioCaptureCoordinator.addSubscriber { bytes, bytesRead ->
+            if (!isListening) return@addSubscriber
             try {
-                recorder.startRecording()
-                val buffer = ByteArray(bufferSize)
-
-                while (isListening && isActive) {
-                    val bytesRead = recorder.read(buffer, 0, buffer.size)
-                    if (bytesRead > 0) {
-                        streamingSession?.matchStream(buffer, bytesRead, System.currentTimeMillis())
-                    }
-                }
-            } finally {
-                recorder.stop()
-                recorder.release()
-                audioRecord = null
-            }
+                streamingSession?.matchStream(bytes, bytesRead, System.currentTimeMillis())
+            } catch (_: Throwable) {}
         }
     }
 
     private fun stopListening() {
         timeoutJob?.cancel()
         isListening = false
-        recordingJob?.cancel()
         collectionJob?.cancel()
+        subscriberId?.let { AudioCaptureCoordinator.removeSubscriber(it) }
+        subscriberId = null
     }
 
     private fun startTimeout() {

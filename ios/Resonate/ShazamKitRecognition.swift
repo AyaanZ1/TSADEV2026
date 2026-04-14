@@ -5,13 +5,14 @@ import AVFoundation
 @objc(ShazamKitRecognition)
 class ShazamKitRecognition: RCTEventEmitter {
     private var session: SHSession?
-    private var audioEngine: AVAudioEngine?
     private var recognitionResolve: RCTPromiseResolveBlock?
     private var recognitionReject: RCTPromiseRejectBlock?
     private var timeoutTimer: Timer?
     private var isListening = false
     private var hasResolved = false
     private var signatureCount = 0
+    private var subscriberId: UUID?
+    private var matched = false
 
     @objc override static func requiresMainQueueSetup() -> Bool {
         return false
@@ -32,16 +33,15 @@ class ShazamKitRecognition: RCTEventEmitter {
             }
 
             self.hasResolved = false
+            self.matched = false
             self.recognitionResolve = resolve
             self.recognitionReject = reject
 
-            // Fresh session each time so old matches don't bleed through
             self.session = SHSession()
             self.session?.delegate = self
 
             self.startListening()
 
-            // 45 second recognition window
             self.timeoutTimer = Timer.scheduledTimer(withTimeInterval: 45.0, repeats: false) { [weak self] _ in
                 self?.handleTimeout()
             }
@@ -63,28 +63,16 @@ class ShazamKitRecognition: RCTEventEmitter {
 
     private func startListening() {
         do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.record, mode: .default, options: .duckOthers)
-            try audioSession.setActive(true)
-
-            let engine = AVAudioEngine()
-            let inputNode = engine.inputNode
-
-            // Use the input node's native output format — mismatched formats can cause
-            // installTap to throw an Obj-C exception that Swift do/catch can't catch
-            let format = inputNode.outputFormat(forBus: 0)
-            guard format.sampleRate > 0 && format.channelCount > 0 else {
-                throw NSError(domain: "ShazamKit", code: -1,
-                              userInfo: [NSLocalizedDescriptionKey: "Audio hardware format not ready"])
-            }
-
-            inputNode.installTap(onBus: 0, bufferSize: 8192, format: format) { [weak self] buffer, time in
+            let id = try AudioTapCoordinator.shared.addSubscriber { [weak self] buffer, time in
                 guard let self = self else { return }
 
-                // Feed ShazamKit
                 self.session?.matchStreamingBuffer(buffer, at: time)
 
-                // Compute RMS amplitude and emit for waveform feedback
+                // Only send amplitude diagnostics before the first match.
+                // After match the JS side isn't listening and the bridge
+                // traffic + main-queue hops just generate heat.
+                guard !self.matched else { return }
+
                 if let channelData = buffer.floatChannelData {
                     let frameCount = Int(buffer.frameLength)
                     guard frameCount > 0 else { return }
@@ -96,11 +84,8 @@ class ShazamKitRecognition: RCTEventEmitter {
                     self.sendEvent(withName: "shazamAmplitude", body: ["amplitude": amplitude])
                 }
             }
-
-            engine.prepare()
-            try engine.start()
-            self.audioEngine = engine
-            isListening = true
+            self.subscriberId = id
+            self.isListening = true
         } catch {
             hasResolved = true
             recognitionReject?("AUDIO_ERROR", error.localizedDescription, error)
@@ -112,12 +97,11 @@ class ShazamKitRecognition: RCTEventEmitter {
         timeoutTimer?.invalidate()
         timeoutTimer = nil
 
-        guard isListening, let engine = audioEngine else { return }
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
-        audioEngine = nil
+        if let id = subscriberId {
+            AudioTapCoordinator.shared.removeSubscriber(id)
+            subscriberId = nil
+        }
         isListening = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     private func handleTimeout() {
@@ -134,6 +118,7 @@ class ShazamKitRecognition: RCTEventEmitter {
         session = nil
         signatureCount = 0
         hasResolved = false
+        matched = false
     }
 }
 
@@ -143,7 +128,6 @@ extension ShazamKitRecognition: SHSessionDelegate {
             guard let self = self else { return }
 
             if let item = match.mediaItems.first {
-                // Replace Apple Music artwork size placeholders
                 var artworkStr = item.artworkURL?.absoluteString ?? ""
                 artworkStr = artworkStr.replacingOccurrences(of: "{w}", with: "400")
                 artworkStr = artworkStr.replacingOccurrences(of: "{h}", with: "400")
@@ -159,6 +143,7 @@ extension ShazamKitRecognition: SHSessionDelegate {
 
                 if !self.hasResolved {
                     self.hasResolved = true
+                    self.matched = true
                     self.timeoutTimer?.invalidate()
                     self.timeoutTimer = nil
                     self.recognitionResolve?(metadata)
@@ -176,12 +161,10 @@ extension ShazamKitRecognition: SHSessionDelegate {
         }
     }
 
-    // Count every signature attempt so JS can confirm ShazamKit is actually working.
-    // Serialize state + event emission through the main queue to avoid a data race with the audio tap thread.
     func session(_ session: SHSession, didNotFindMatchFor signature: SHSignature, error: Error?) {
         let friendly = ShazamKitRecognition.humanErrorMessage(error)
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, self.isListening else { return }
+            guard let self = self, self.isListening, !self.matched else { return }
             self.signatureCount += 1
             var body: [String: Any] = [
                 "amplitude": -1.0,

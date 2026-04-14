@@ -29,8 +29,8 @@ import {
 } from 'react-native-heroicons/outline';
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, {Defs, Ellipse, Path, RadialGradient, Stop} from 'react-native-svg';
-import {AudioService} from '../services/AudioService';
 import {HapticEngine} from '../services/HapticEngine';
+import {MusicHapticService} from '../services/MusicHapticService';
 import {
   MusicRecognitionService,
   RecognitionDiagnostics,
@@ -101,10 +101,20 @@ const getLyricRowHeight = (size: 'S' | 'M' | 'L' | 'XL') => {
   return Math.round(base * 1.25 + 10);
 };
 
+const normalizeSongIdentityPart = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+    .replace(/\b(feat|ft|featuring)\.?\b.*$/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+
 const LYRIC_SCROLL_PADDING_TOP = 10;
 const LYRIC_ACTIVE_LINE_OFFSET = 56;
 const SONG_SWITCH_CONFIRMATIONS = 2;
-const SONG_SWITCH_MIN_STABILITY_MS = 1200;
+const SONG_SWITCH_MIN_STABILITY_MS = 800;
+const SONG_SWITCH_PENDING_MAX_AGE_MS = 4500;
 const SAME_SONG_FORWARD_CORRECTION_SEC = 0.65;
 const SAME_SONG_BACKWARD_CORRECTION_SEC = 1.1;
 const SAME_SONG_ANCHOR_CONFIRMATIONS = 2;
@@ -192,7 +202,7 @@ const MarqueeText = ({
     const loop = Animated.loop(
       Animated.timing(tx, {
         toValue: -(textW + GAP),
-        duration: ((textW + GAP) / 60) * 1000, // 60px/s
+        duration: ((textW + GAP) / 35) * 1000, // 35px/s
         useNativeDriver: true,
         easing: Easing.linear,
       }),
@@ -240,8 +250,8 @@ const MarqueeText = ({
 
 // SVG Waveform — each of the 4 waves is driven by its own frequency band.
 // bandsRef.current = [bass, lowMid, highMid, treble], each 0-100.
-// Written by the AudioService listener every ~33 ms; read here each frame
-// without triggering a Dashboard re-render.
+// Written by the MusicHapticService frame listener every ~33 ms; read here
+// each frame without triggering a Dashboard re-render.
 const SvgWaveform = ({
   active,
   bandsRef,
@@ -256,6 +266,7 @@ const SvgWaveform = ({
   const [, forceUpdate] = useState(0);
   const [w, setW] = useState(0);
   const h = 160;
+  const frameIntervalMs = active ? 50 : 100;
 
   // Time-step per wave: bass is slow/wide, treble is fast/tight
   const TIME_STEPS: [number, number, number, number] = [
@@ -270,32 +281,39 @@ const SvgWaveform = ({
         t[i] += active ? TIME_STEPS[i] : IDLE_STEP;
       }
       forceUpdate(n => n + 1);
-    }, 33);
+    }, frameIntervalMs);
     return () => clearInterval(interval);
-  }, [active]);
+  }, [active, frameIntervalMs]);
 
   const colors = [palette.coral, palette.violet, palette.cyan, palette.gold];
 
   const makePath = (i: number): string => {
     const t = timesRef.current[i];
-    // Band value 0-100; idle uses a gentle fixed level
     const bandVal = active ? bandsRef.current[i] : 0;
-    // Wave 0 (bass) is tallest; each subsequent wave is slightly shorter at same energy
     const maxAmp = h * (0.13 - i * 0.015);
     const amp = active ? maxAmp * Math.max(bandVal / 100, 0.08) : h * 0.025;
-    // Spatial frequency: bass is wide/slow, treble is narrow/fast
     const freq = 0.006 + i * 0.004;
     const phase = t;
-    const pts: string[] = [];
-    for (let x = 0; x <= w; x += 2) {
+    const halfH = h / 2;
+    const f2 = freq * 2.1;
+    const p2 = phase * 0.65;
+    const a2 = amp * 0.28;
+    const f3 = freq * 3.7;
+    const p3 = phase * 1.3;
+    const a3 = amp * 0.1;
+    const step = 5;
+    const n = Math.floor(w / step) + 1;
+    const parts = new Array<string>(n);
+    for (let j = 0; j < n; j++) {
+      const x = j * step;
       const y =
-        h / 2 +
+        halfH +
         Math.sin(x * freq + phase) * amp +
-        Math.sin(x * freq * 2.1 + phase * 0.65) * amp * 0.28 +
-        Math.sin(x * freq * 3.7 + phase * 1.3) * amp * 0.1;
-      pts.push(`${x === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`);
+        Math.sin(x * f2 + p2) * a2 +
+        Math.sin(x * f3 + p3) * a3;
+      parts[j] = `${j === 0 ? 'M' : 'L'}${x} ${y | 0}`;
     }
-    return pts.join(' ');
+    return parts.join(' ');
   };
 
   if (w === 0) {
@@ -845,8 +863,8 @@ export const Dashboard = () => {
 
   const breathe = useRef(new Animated.Value(1)).current;
   // Live mic band energies (0–100 each: bass, lowMid, highMid, treble).
-  // Written by AudioService listener; read by SvgWaveform each frame — avoids
-  // re-rendering Dashboard on every audio tick.
+  // Written by MusicHapticService frame listener; read by SvgWaveform each
+  // frame — avoids re-rendering Dashboard on every audio tick.
   const micBandsRef = useRef<[number, number, number, number]>([
     30, 22, 18, 12,
   ]);
@@ -859,6 +877,7 @@ export const Dashboard = () => {
   const isListeningRef = useRef(false);
   const recognizedRef = useRef(false);
   const sessionIdRef = useRef(0);
+  const transitioningRef = useRef(false);
   const syncEngineRef = useRef(new LyricSyncEngine());
   const abortControllerRef = useRef<AbortController | null>(null);
   const lyricScrollRef = useRef<ScrollView>(null);
@@ -927,25 +946,34 @@ export const Dashboard = () => {
     };
   }, [isListening]);
 
-  // Once we have a match, the waveform and haptics follow the active track.
+  // Keep the native music-haptic engine alive while a track is active.
   useEffect(() => {
     if (!recognized) return undefined;
-    const listener = AudioService.addListener(data => {
-      const b = data.bands;
-      const r = micBandsRef.current;
-      r[0] = r[0] * 0.62 + b[0] * 100 * 0.38;
-      r[1] = r[1] * 0.58 + b[1] * 100 * 0.42;
-      r[2] = r[2] * 0.54 + b[2] * 100 * 0.46;
-      r[3] = r[3] * 0.48 + b[3] * 100 * 0.52;
-      HapticEngine.processAudioFrame(data.amplitude, data.frequency);
-    });
+    void MusicHapticService.start();
     return () => {
-      listener.remove();
-      AudioService.stop();
-      HapticEngine.reset();
+      void MusicHapticService.stop();
       micBandsRef.current = [30, 22, 18, 12];
     };
   }, [recognized]);
+
+  // Only mirror native band data into JS while the waveform is on screen.
+  // Native haptics keep running either way; this just avoids bridge + JS churn
+  // when the user is on another tab.
+  useEffect(() => {
+    if (!recognized || tab !== 'listen') return undefined;
+    const sub = MusicHapticService.addFrameListener(frame => {
+      const b = frame.bands;
+      const r = micBandsRef.current;
+      r[0] = r[0] * 0.45 + b[0] * 100 * 0.55;
+      r[1] = r[1] * 0.45 + b[1] * 100 * 0.55;
+      r[2] = r[2] * 0.45 + b[2] * 100 * 0.55;
+      r[3] = r[3] * 0.45 + b[3] * 100 * 0.55;
+    });
+    return () => {
+      sub.remove();
+      micBandsRef.current = [30, 22, 18, 12];
+    };
+  }, [recognized, tab]);
 
   // Playback clock follows the latest Shazam anchor.
   useEffect(() => {
@@ -954,12 +982,16 @@ export const Dashboard = () => {
       return undefined;
     }
 
+    if (tab !== 'listen') {
+      return undefined;
+    }
+
     const interval = setInterval(() => {
       setPlaybackPosition(syncEngineRef.current.getBasePosition());
     }, 100);
 
     return () => clearInterval(interval);
-  }, [recognized]);
+  }, [recognized, tab]);
 
   // Keep the active lyric line in view.
   useEffect(() => {
@@ -984,14 +1016,14 @@ export const Dashboard = () => {
       syncEngineRef.current.stop();
       abortControllerRef.current?.abort();
       MusicRecognitionService.stop();
-      AudioService.stop();
+      void MusicHapticService.stop();
     };
   }, []);
 
   const buildSongKey = (result: Pick<RecognitionResult, 'title' | 'artist'>) =>
-    `${result.title.trim().toLowerCase()}::${result.artist
-      .trim()
-      .toLowerCase()}`;
+    `${normalizeSongIdentityPart(result.title)}::${normalizeSongIdentityPart(
+      result.artist,
+    )}`;
 
   const resetLyricState = () => {
     syncEngineRef.current.stop();
@@ -1035,6 +1067,17 @@ export const Dashboard = () => {
             anchorUpdate.isJump
           }`,
       );
+    }
+  };
+
+  const clearStalePendingSongSwitch = (nowMs: number) => {
+    const pending = pendingSongSwitchRef.current;
+    if (!pending) {
+      return;
+    }
+
+    if (nowMs - pending.firstSeenMs > SONG_SWITCH_PENDING_MAX_AGE_MS) {
+      pendingSongSwitchRef.current = null;
     }
   };
 
@@ -1146,7 +1189,7 @@ export const Dashboard = () => {
   const resetRecognitionSession = () => {
     abortControllerRef.current?.abort();
     MusicRecognitionService.stop();
-    AudioService.stop();
+    void MusicHapticService.stop();
     HapticEngine.reset();
     syncEngineRef.current.stop();
 
@@ -1176,14 +1219,15 @@ export const Dashboard = () => {
     const unsubscribe = MusicRecognitionService.subscribeToMatches(result => {
       if (!recognizedRef.current) return;
 
+      const now = performance.now();
+      clearStalePendingSongSwitch(now);
+
       const nextSongKey = buildSongKey(result);
       if (nextSongKey === currentSongKeyRef.current) {
-        pendingSongSwitchRef.current = null;
         considerSameSongAnchor(result);
         return;
       }
 
-      const now = performance.now();
       const pending = pendingSongSwitchRef.current;
 
       if (!pending || pending.key !== nextSongKey) {
@@ -1270,15 +1314,21 @@ export const Dashboard = () => {
   }
 
   const handleListen = async () => {
+    if (transitioningRef.current) return;
+
     if (recognizedRef.current) {
+      transitioningRef.current = true;
       resetRecognitionSession();
+      setTimeout(() => { transitioningRef.current = false; }, 300);
       return;
     }
 
     if (isListeningRef.current) {
+      transitioningRef.current = true;
       MusicRecognitionService.stop();
       isListeningRef.current = false;
       setIsListening(false);
+      setTimeout(() => { transitioningRef.current = false; }, 300);
       return;
     }
 
@@ -1299,8 +1349,8 @@ export const Dashboard = () => {
       setRecognized(true);
       setIsListening(false);
 
-      // Start mic for rhythm haptics
-      AudioService.start();
+      // Music-haptic engine takes over from ShazamKit — same shared audio
+      // capture, no teardown/restart gap.
       HapticEngine.triggerSuccess();
 
       activateMatchedSong(result);

@@ -24,6 +24,9 @@
 		8E4D3F310A1B2C3D4E5F6071 /* SceneDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 8E4D3F300A1B2C3D4E5F6071 /* SceneDelegate.mm */; };
 		9B3EE44F6DF64621A99F026A /* DMSans-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 36DC1C52A44B46CEBCB965FA /* DMSans-Regular.ttf */; };
 		DE7AA518A39B406A89608374AD4E2BD1 /* ShazamKitRecognitionBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = EF7CDE96B61543948EC67ED104FCD331 /* ShazamKitRecognitionBridge.m */; };
+		A1B2C3D4E5F6A7B8C9D0E1F1 /* AudioTapCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E1F0 /* AudioTapCoordinator.swift */; };
+		A2B3C4D5E6F7A8B9C0D1E2F1 /* MusicHapticEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D5E6F7A8B9C0D1E2F0 /* MusicHapticEngine.swift */; };
+		A3B4C5D6E7F8A9B0C1D2E3F1 /* MusicHapticEngineBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = A3B4C5D6E7F8A9B0C1D2E3F0 /* MusicHapticEngineBridge.m */; };
 		E5D553DE12555378A14F6A45 /* AppIconModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB66453AF7701AB961738DCC /* AppIconModule.swift */; };
 		EC8261BAF4AB45FF9347D6B3 /* DMSans-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DD4A5B0647714CFCA438076E /* DMSans-Bold.ttf */; };
 		F089D750449C478BAB5FDC5B /* Syne-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C590EB1B46C34E1794BE389F /* Syne-Bold.ttf */; };
@@ -75,6 +78,9 @@
 		DD4A5B0647714CFCA438076E /* DMSans-Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "DMSans-Bold.ttf"; path = "../assets/fonts/DMSans-Bold.ttf"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		EF7CDE96B61543948EC67ED104FCD331 /* ShazamKitRecognitionBridge.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = ShazamKitRecognitionBridge.m; path = Resonate/ShazamKitRecognitionBridge.m; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E1F0 /* AudioTapCoordinator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = AudioTapCoordinator.swift; path = Resonate/AudioTapCoordinator.swift; sourceTree = "<group>"; };
+		A2B3C4D5E6F7A8B9C0D1E2F0 /* MusicHapticEngine.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = MusicHapticEngine.swift; path = Resonate/MusicHapticEngine.swift; sourceTree = "<group>"; };
+		A3B4C5D6E7F8A9B0C1D2E3F0 /* MusicHapticEngineBridge.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = MusicHapticEngineBridge.m; path = Resonate/MusicHapticEngineBridge.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -129,6 +135,9 @@
 				A2ADD47CE44A872B06CA229D /* AppIconModuleBridge.m */,
 				16A9E577909248BBBA2DCCD350A1103F /* ShazamKitRecognition.swift */,
 				EF7CDE96B61543948EC67ED104FCD331 /* ShazamKitRecognitionBridge.m */,
+				A1B2C3D4E5F6A7B8C9D0E1F0 /* AudioTapCoordinator.swift */,
+				A2B3C4D5E6F7A8B9C0D1E2F0 /* MusicHapticEngine.swift */,
+				A3B4C5D6E7F8A9B0C1D2E3F0 /* MusicHapticEngineBridge.m */,
 				06E8EAE158AE32C4598DE402 /* AppIconDark@2x.png */,
 				52D0BD8C63A7865A49CA32E6 /* AppIconDark@3x.png */,
 			);
@@ -468,6 +477,9 @@
 				FCA2CFA5DFFD9F25CFBC6E05 /* AppIconModuleBridge.m in Sources */,
 				6243FE1D4A4343F582F8AEBF8208EF33 /* ShazamKitRecognition.swift in Sources */,
 				DE7AA518A39B406A89608374AD4E2BD1 /* ShazamKitRecognitionBridge.m in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E1F1 /* AudioTapCoordinator.swift in Sources */,
+				A2B3C4D5E6F7A8B9C0D1E2F1 /* MusicHapticEngine.swift in Sources */,
+				A3B4C5D6E7F8A9B0C1D2E3F1 /* MusicHapticEngineBridge.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
