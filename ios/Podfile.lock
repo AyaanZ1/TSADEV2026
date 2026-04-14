@@ -1,4 +1,8 @@
 PODS:
+  - AsyncStorage (3.0.2):
+    - glog
+    - RCT-Folly (= 2022.05.16.00)
+    - React-Core
   - boost (1.83.0)
   - BVLinearGradient (2.8.3):
     - React-Core
@@ -1071,6 +1075,7 @@ PODS:
   - Yoga (1.14.0)
 
 DEPENDENCIES:
+  - "AsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
   - boost (from `../node_modules/react-native/third-party-podspecs/boost.podspec`)
   - BVLinearGradient (from `../node_modules/react-native-linear-gradient`)
   - DoubleConversion (from `../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec`)
@@ -1135,6 +1140,8 @@ SPEC REPOS:
     - SocketRocket
 
 EXTERNAL SOURCES:
+  AsyncStorage:
+    :path: "../node_modules/@react-native-async-storage/async-storage"
   boost:
     :podspec: "../node_modules/react-native/third-party-podspecs/boost.podspec"
   BVLinearGradient:
@@ -1244,6 +1251,7 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
+  AsyncStorage: 8072a34eae611375c2908de5fd5fdcbc393ebca8
   boost: d3f49c53809116a5d38da093a8aa78bf551aed09
   BVLinearGradient: cb006ba232a1f3e4f341bb62c42d1098c284da70
   DoubleConversion: fea03f2699887d960129cc54bba7e52542b6f953

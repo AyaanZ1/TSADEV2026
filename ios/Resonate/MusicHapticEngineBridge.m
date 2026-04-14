@@ -12,6 +12,8 @@ RCT_EXTERN_METHOD(start:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(stop:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(setConfig:(NSDictionary *)config)
+
 @end
 
 #pragma clang diagnostic pop

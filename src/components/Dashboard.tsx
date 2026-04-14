@@ -39,10 +39,10 @@ import {
 import {LRCLIBService, LRCLine} from '../services/LRCLIBService';
 import AppIcon, {AppIconName} from '../NativeModules/AppIconModule';
 import {LyricSyncEngine} from '../services/LyricSyncEngine';
+import {useSettingsStore, ThemeMode, LyricLanguageCode, AppLanguage} from '../store/settingsStore';
+import {t} from '../i18n/translations';
 
-type ThemeMode = 'dark' | 'light' | 'amoled';
 type Tab = 'listen' | 'haptic' | 'settings';
-type LyricLanguageCode = 'EN' | 'ES' | 'KR' | 'JP' | 'FR' | 'ZH';
 type PendingSongSwitch = {
   key: string;
   count: number;
@@ -367,11 +367,15 @@ const ListenControl = ({
   isRecognized,
   palette,
   onPress,
+  labelText,
+  subText,
 }: {
   isActive: boolean;
   isRecognized: boolean;
   palette: Palette;
   onPress: () => void;
+  labelText: string;
+  subText: string;
 }) => {
   const ring1 = useRef(new Animated.Value(0)).current;
   const ring2 = useRef(new Animated.Value(0)).current;
@@ -439,8 +443,8 @@ const ListenControl = ({
     }),
   });
 
-  const label = isActive ? 'Listening' : 'Start Listening';
-  const sub = isActive ? 'Identifying audio...' : 'Tap to recognize';
+  const label = labelText;
+  const sub = subText;
 
   return (
     <View style={{alignItems: 'center', marginBottom: 14, marginTop: 8}}>
@@ -828,19 +832,24 @@ const GlassCard = ({
 
 // Main Dashboard
 export const Dashboard = () => {
-  const [theme, setTheme] = useState<ThemeMode>('dark');
+  // Persistent settings from Zustand store
+  const {
+    theme, setTheme,
+    appLanguage, setAppLanguage,
+    defaultLyricLang, setDefaultLyricLang,
+    fontSize, setFontSize,
+    intensity, setIntensity,
+    bassBoost, setBassBoost,
+    trebleBoost, setTrebleBoost,
+    activePreset, applyPreset,
+  } = useSettingsStore();
+  const i18n = t(appLanguage);
+
+  // Non-persistent local UI state
   const [tab, setTab] = useState<Tab>('listen');
   const [isListening, setIsListening] = useState(false);
   const [recognized, setRecognized] = useState(false);
-  const [intensity, setIntensity] = useState(72);
-  const [bassBoost, setBassBoost] = useState(55);
-  const [trebleBoost, setTrebleBoost] = useState(40);
-  const [defaultLyricLang, setDefaultLyricLang] =
-    useState<LyricLanguageCode>('EN');
-  const [appLanguage, setAppLanguage] = useState('English');
-  const [fontSize, setFontSize] = useState<'S' | 'M' | 'L' | 'XL'>('M');
   const [playbackPosition, setPlaybackPosition] = useState(0);
-  const [activePreset, setActivePreset] = useState<string | null>(null);
   const [activeIcon, setActiveIcon] = useState<AppIconName>('default');
 
   useEffect(() => {
@@ -945,6 +954,16 @@ export const Dashboard = () => {
       micBandsRef.current = [30, 22, 18, 12];
     };
   }, [isListening]);
+
+  // Haptic sliders are persistent settings and should drive the native engine
+  // immediately, not just update the UI.
+  useEffect(() => {
+    MusicHapticService.setConfig({
+      intensity,
+      bassBoost,
+      trebleBoost,
+    });
+  }, [intensity, bassBoost, trebleBoost]);
 
   // Keep the native music-haptic engine alive while a track is active.
   useEffect(() => {
@@ -1363,9 +1382,9 @@ export const Dashboard = () => {
       if (code === 'CANCELLED') {
         // User cancelled, nothing to show
       } else if (code === 'TIMEOUT') {
-        setRecognitionError('No song recognized');
+        setRecognitionError(i18n.noSongRecognized);
       } else if (code !== 'BUSY') {
-        setRecognitionError('Recognition failed');
+        setRecognitionError(i18n.recognitionFailed);
       }
     }
   };
@@ -1375,27 +1394,31 @@ export const Dashboard = () => {
 
   const presets = [
     {
-      name: 'Concert',
+      key: 'Concert',
+      name: i18n.concert,
       Icon: MusicalNoteIcon,
-      desc: 'Full range, high energy',
+      desc: i18n.concertDesc,
       color: palette.coral,
     },
     {
-      name: 'EDM',
+      key: 'EDM',
+      name: i18n.edm,
       Icon: ChartBarIcon,
-      desc: 'Bass-heavy, pulsing',
+      desc: i18n.edmDesc,
       color: palette.violet,
     },
     {
-      name: 'Classical',
+      key: 'Classical',
+      name: i18n.classical,
       Icon: SpeakerWaveIcon,
-      desc: 'Gentle, dynamic range',
+      desc: i18n.classicalDesc,
       color: palette.cyan,
     },
     {
-      name: 'Speech',
+      key: 'Speech',
+      name: i18n.speech,
       Icon: MicrophoneIcon,
-      desc: 'Clear mid-range focus',
+      desc: i18n.speechDesc,
       color: palette.gold,
     },
   ];
@@ -1468,10 +1491,10 @@ export const Dashboard = () => {
               fontWeight: '500',
             }}>
             {tab === 'listen'
-              ? 'Feel the music'
+              ? i18n.feelTheMusic
               : tab === 'haptic'
-              ? 'Haptic engine'
-              : 'Accessibility'}
+              ? i18n.hapticEngine
+              : i18n.accessibility}
           </Text>
         </View>
 
@@ -1562,6 +1585,8 @@ export const Dashboard = () => {
                     isRecognized={false}
                     palette={palette}
                     onPress={handleListen}
+                    labelText={isListening ? i18n.listening : i18n.startListening}
+                    subText={isListening ? i18n.identifyingAudio : i18n.tapToRecognize}
                   />
                   {isListening && sigCount > 0 && !shazamError && (
                     <Text
@@ -1571,8 +1596,10 @@ export const Dashboard = () => {
                         fontFamily: 'DMSans-Regular',
                         marginTop: 10,
                       }}>
-                      {sigCount} {sigCount === 1 ? 'signature' : 'signatures'}{' '}
-                      checked
+                      {sigCount}{' '}
+                      {sigCount === 1
+                        ? i18n.signatureChecked
+                        : i18n.signaturesChecked}
                     </Text>
                   )}
                   {isListening && shazamError ? (
@@ -1763,7 +1790,7 @@ export const Dashboard = () => {
                             fontFamily: 'DMSans-Regular',
                             fontSize: 13,
                           }}>
-                          Loading lyrics...
+                          {i18n.loadingLyrics}
                         </Text>
                       </View>
                     )}
@@ -1868,7 +1895,7 @@ export const Dashboard = () => {
                             fontFamily: 'DMSans-Regular',
                             fontSize: 13,
                           }}>
-                          Lyrics unavailable
+                          {i18n.lyricsUnavailable}
                         </Text>
                       </View>
                     )}
@@ -1892,25 +1919,25 @@ export const Dashboard = () => {
                 }}>
                 {[
                   {
-                    label: 'Sub Bass',
+                    label: i18n.subBass,
                     hz: '20-60 Hz',
                     color: palette.coral,
                     value: Math.round(intensity * 0.9),
                   },
                   {
-                    label: 'Bass',
+                    label: i18n.bass,
                     hz: '60-250 Hz',
                     color: palette.violet,
                     value: bassBoost,
                   },
                   {
-                    label: 'Mid',
+                    label: i18n.mid,
                     hz: '250-4k Hz',
                     color: palette.cyan,
                     value: Math.round((intensity + trebleBoost) / 2),
                   },
                   {
-                    label: 'Treble',
+                    label: i18n.treble,
                     hz: '4k-20k Hz',
                     color: palette.gold,
                     value: trebleBoost,
@@ -1986,14 +2013,14 @@ export const Dashboard = () => {
                     letterSpacing: 1,
                     marginBottom: 16,
                   }}>
-                  VIBRATION MAPPING
+                  {i18n.vibrationMapping}
                 </Text>
                 <CustomSlider
                   value={intensity}
                   min={0}
                   max={100}
                   onChange={setIntensity}
-                  label="Vibration Intensity"
+                  label={i18n.vibrationIntensity}
                   color={palette.coral}
                   palette={palette}
                 />
@@ -2002,7 +2029,7 @@ export const Dashboard = () => {
                   min={0}
                   max={100}
                   onChange={setBassBoost}
-                  label="Bass Response"
+                  label={i18n.bassResponse}
                   color={palette.violet}
                   palette={palette}
                 />
@@ -2011,7 +2038,7 @@ export const Dashboard = () => {
                   min={0}
                   max={100}
                   onChange={setTrebleBoost}
-                  label="Treble Clarity"
+                  label={i18n.trebleClarity}
                   color={palette.cyan}
                   palette={palette}
                 />
@@ -2028,7 +2055,7 @@ export const Dashboard = () => {
                   marginTop: 16,
                   marginLeft: 4,
                 }}>
-                PRESETS
+                {i18n.presets}
               </Text>
               <View
                 style={{
@@ -2037,37 +2064,18 @@ export const Dashboard = () => {
                   marginHorizontal: -5,
                 }}>
                 {presets.map(preset => (
-                  <View key={preset.name} style={{width: '50%', padding: 5}}>
+                  <View key={preset.key} style={{width: '50%', padding: 5}}>
                     <TouchableOpacity
-                      onPress={() => {
-                        setActivePreset(preset.name);
-                        if (preset.name === 'EDM') {
-                          setIntensity(88);
-                          setBassBoost(90);
-                          setTrebleBoost(48);
-                        } else if (preset.name === 'Classical') {
-                          setIntensity(54);
-                          setBassBoost(42);
-                          setTrebleBoost(58);
-                        } else if (preset.name === 'Speech') {
-                          setIntensity(44);
-                          setBassBoost(38);
-                          setTrebleBoost(62);
-                        } else {
-                          setIntensity(72);
-                          setBassBoost(55);
-                          setTrebleBoost(40);
-                        }
-                      }}
+                      onPress={() => applyPreset(preset.key)}
                       style={[
                         styles.card,
                         {
                           backgroundColor:
-                            activePreset === preset.name
+                            activePreset === preset.key
                               ? `${preset.color}14`
                               : palette.surface,
                           borderColor:
-                            activePreset === preset.name
+                            activePreset === preset.key
                               ? `${preset.color}40`
                               : palette.surfaceBorder,
                           borderWidth: 1,
@@ -2135,13 +2143,13 @@ export const Dashboard = () => {
                     letterSpacing: 1,
                     marginBottom: 12,
                   }}>
-                  THEME
+                  {i18n.themeLabel}
                 </Text>
                 <View style={{flexDirection: 'row'}}>
                   {[
                     {
                       key: 'light',
-                      label: 'Light',
+                      label: i18n.light,
                       Icon: SunIcon,
                       swatch: '#FFF8F0',
                       accent: '#6D28D9',
@@ -2149,7 +2157,7 @@ export const Dashboard = () => {
                     },
                     {
                       key: 'dark',
-                      label: 'Dark',
+                      label: i18n.dark,
                       Icon: MoonIcon,
                       swatch: '#0D0D1A',
                       accent: '#A855F7',
@@ -2157,7 +2165,7 @@ export const Dashboard = () => {
                     },
                     {
                       key: 'amoled',
-                      label: 'AMOLED',
+                      label: i18n.amoled,
                       Icon: BoltIcon,
                       swatch: '#000000',
                       accent: '#F472B6',
@@ -2231,19 +2239,19 @@ export const Dashboard = () => {
                     letterSpacing: 1,
                     marginBottom: 12,
                   }}>
-                  APP ICON
+                  {i18n.appIcon}
                 </Text>
                 <View style={{flexDirection: 'row'}}>
                   {[
                     {
                       key: 'default' as AppIconName,
-                      label: 'Light',
+                      label: i18n.light,
                       bg: '#FFF8F0',
                       border: 'rgba(0,0,0,0.08)',
                     },
                     {
                       key: 'AppIconDark' as AppIconName,
-                      label: 'Dark',
+                      label: i18n.dark,
                       bg: '#000000',
                       border: 'rgba(255,255,255,0.08)',
                     },
@@ -2334,7 +2342,7 @@ export const Dashboard = () => {
                     fontFamily: 'DMSans-Regular',
                     marginTop: 10,
                   }}>
-                  iOS will show a confirmation when changing the icon.
+                  {i18n.iconConfirmHint}
                 </Text>
               </GlassCard>
 
@@ -2348,7 +2356,7 @@ export const Dashboard = () => {
                     letterSpacing: 1,
                     marginBottom: 12,
                   }}>
-                  APP LANGUAGE
+                  {i18n.appLanguageLabel}
                 </Text>
                 {[
                   {native: 'English', english: 'English'},
@@ -2362,7 +2370,7 @@ export const Dashboard = () => {
                   return (
                     <TouchableOpacity
                       key={lang.native}
-                      onPress={() => setAppLanguage(lang.native)}
+                      onPress={() => setAppLanguage(lang.native as AppLanguage)}
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
@@ -2435,7 +2443,7 @@ export const Dashboard = () => {
                     letterSpacing: 1,
                     marginBottom: 12,
                   }}>
-                  RESOLYRIC SIZE
+                  {i18n.lyricSize}
                 </Text>
                 <View style={{flexDirection: 'row'}}>
                   {(['S', 'M', 'L', 'XL'] as const).map((size, idx) => (
@@ -2489,7 +2497,7 @@ export const Dashboard = () => {
                     letterSpacing: 1,
                     marginBottom: 12,
                   }}>
-                  DEFAULT LYRIC LANGUAGE
+                  {i18n.defaultLyricLanguage}
                 </Text>
                 <View
                   style={{
@@ -2599,7 +2607,7 @@ export const Dashboard = () => {
                       fontWeight: '700',
                       fontSize: 14,
                     }}>
-                    Wearable Support
+                    {i18n.wearableSupport}
                   </Text>
                   <Text
                     style={{
@@ -2608,7 +2616,7 @@ export const Dashboard = () => {
                       marginTop: 2,
                       fontFamily: 'DMSans-Regular',
                     }}>
-                    Coming Spring 2026
+                    {i18n.comingSoon}
                   </Text>
                 </View>
                 <View
@@ -2625,7 +2633,7 @@ export const Dashboard = () => {
                       styles.tagText,
                       {color: palette.violet, fontFamily: 'DMSans-Bold'},
                     ]}>
-                    SOON
+                    {i18n.soon}
                   </Text>
                 </View>
               </View>
@@ -2651,21 +2659,21 @@ export const Dashboard = () => {
         <View style={styles.navRow}>
           <NavItem
             IconComponent={MicrophoneIcon}
-            label="Listen"
+            label={i18n.listen}
             active={tab === 'listen'}
             onPress={() => setTab('listen')}
             palette={palette}
           />
           <NavItem
             IconComponent={Squares2X2Icon}
-            label="Haptic"
+            label={i18n.haptic}
             active={tab === 'haptic'}
             onPress={() => setTab('haptic')}
             palette={palette}
           />
           <NavItem
             IconComponent={Cog6ToothIcon}
-            label="Settings"
+            label={i18n.settings}
             active={tab === 'settings'}
             onPress={() => setTab('settings')}
             palette={palette}

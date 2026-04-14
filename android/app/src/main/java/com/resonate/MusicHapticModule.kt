@@ -2,6 +2,7 @@ package com.resonate
 
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -20,6 +21,9 @@ class MusicHapticModule(
     override fun getName() = NAME
 
     @Volatile private var listenerCount = 0
+    @Volatile private var intensitySetting = 72f
+    @Volatile private var bassBoostSetting = 55f
+    @Volatile private var trebleBoostSetting = 40f
 
     // supportedEvents isn't strictly required on Android, but RN checks against
     // these counts via the NativeEventEmitter listener-added hooks.
@@ -34,6 +38,14 @@ class MusicHapticModule(
     }
 
     private var processor: MusicHapticProcessor? = null
+
+    @ReactMethod
+    fun setConfig(config: ReadableMap) {
+        intensitySetting = readSetting(config, "intensity", intensitySetting)
+        bassBoostSetting = readSetting(config, "bassBoost", bassBoostSetting)
+        trebleBoostSetting = readSetting(config, "trebleBoost", trebleBoostSetting)
+        processor?.updateConfig(intensitySetting, bassBoostSetting, trebleBoostSetting)
+    }
 
     @ReactMethod
     fun start(promise: Promise) {
@@ -69,6 +81,7 @@ class MusicHapticModule(
             },
         )
         try {
+            proc.updateConfig(intensitySetting, bassBoostSetting, trebleBoostSetting)
             proc.start()
             processor = proc
             promise.resolve(null)
@@ -82,5 +95,12 @@ class MusicHapticModule(
         processor?.stop()
         processor = null
         promise.resolve(null)
+    }
+
+    private fun readSetting(config: ReadableMap, key: String, fallback: Float): Float {
+        if (!config.hasKey(key) || config.isNull(key)) {
+            return fallback
+        }
+        return config.getDouble(key).toFloat().coerceIn(0f, 100f)
     }
 }

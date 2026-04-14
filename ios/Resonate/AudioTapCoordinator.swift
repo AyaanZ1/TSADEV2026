@@ -67,6 +67,9 @@ final class AudioTapCoordinator: NSObject {
         try session.setCategory(.playAndRecord,
                                 mode: .measurement,
                                 options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers])
+        if #available(iOS 13.0, *) {
+            try session.setAllowHapticsAndSystemSoundsDuringRecording(true)
+        }
         try session.setPreferredSampleRate(44_100)
         try session.setPreferredIOBufferDuration(0.0232)
         try session.setActive(true)

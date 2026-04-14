@@ -23,6 +23,9 @@ class MusicHapticEngine: RCTEventEmitter {
     private static let fftSize = 2048
     private static let hopSize = 1024 // 50% overlap
     private static let emitIntervalMs: Double = 50 // ~20 Hz JS events
+    private static let defaultIntensitySetting: Float = 72
+    private static let defaultBassBoostSetting: Float = 55
+    private static let defaultTrebleBoostSetting: Float = 40
 
     // Band edges in Hz. Last entry becomes the upper bound of the final band.
     private static let bandEdges: [Float] = [
@@ -76,12 +79,28 @@ class MusicHapticEngine: RCTEventEmitter {
     private var fluxHistory: [Float] = Array(repeating: 0, count: 43) // ~1 sec at 43 Hz hop rate
     private var fluxHistoryIndex = 0
     private var lastBeatTime: CFTimeInterval = 0
+    private var lastPulseTime: CFTimeInterval = 0
+    private var tempoIntervals: [Float] = Array(repeating: 0, count: 8)
+    private var tempoIntervalCount = 0
+    private var tempoIntervalIndex = 0
+    private var tempoIntervalEstimate: CFTimeInterval = 0
+    private var tempoConfidence: Float = 0
+    private var nextTempoBeatTime: CFTimeInterval = 0
     private static let minBeatInterval: CFTimeInterval = 0.12 // 500 BPM ceiling
+    private static let tempoMinInterval: CFTimeInterval = 0.28
+    private static let tempoMaxInterval: CFTimeInterval = 1.1
+    private static let tempoMinConfidence: Float = 0.72
+    private static let tempoConfidenceDriftTolerance: Float = 0.18
+    private static let tempoPulseWindow: CFTimeInterval = 0.05
+    private static let tempoPulseStrengthScale: Float = 0.72
 
     // Core Haptics
     private var hapticEngine: CHHapticEngine?
     private var continuousPlayer: CHHapticAdvancedPatternPlayer?
     private var hapticsStarted = false
+    private var intensitySetting: Float = MusicHapticEngine.defaultIntensitySetting
+    private var bassBoostSetting: Float = MusicHapticEngine.defaultBassBoostSetting
+    private var trebleBoostSetting: Float = MusicHapticEngine.defaultTrebleBoostSetting
 
     // Throttle
     private var lastEmitTime: CFTimeInterval = 0
@@ -130,6 +149,7 @@ class MusicHapticEngine: RCTEventEmitter {
                 self.isRunning = true
                 resolve(nil)
             } catch {
+                NSLog("[Resonate] MusicHapticEngine start failed: %@", error.localizedDescription)
                 self.teardown()
                 reject("MUSIC_HAPTIC_START", error.localizedDescription, error)
             }
@@ -141,6 +161,19 @@ class MusicHapticEngine: RCTEventEmitter {
         processQueue.async { [weak self] in
             self?.teardown()
             resolve(nil)
+        }
+    }
+
+    @objc
+    func setConfig(_ config: NSDictionary) {
+        processQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.intensitySetting = self.clampSetting(config["intensity"],
+                                                     defaultValue: MusicHapticEngine.defaultIntensitySetting)
+            self.bassBoostSetting = self.clampSetting(config["bassBoost"],
+                                                      defaultValue: MusicHapticEngine.defaultBassBoostSetting)
+            self.trebleBoostSetting = self.clampSetting(config["trebleBoost"],
+                                                        defaultValue: MusicHapticEngine.defaultTrebleBoostSetting)
         }
     }
 
@@ -172,10 +205,12 @@ class MusicHapticEngine: RCTEventEmitter {
         self.prevMagnitudes = Array(repeating: 0, count: n / 2)
         self.fluxHistory = Array(repeating: 0, count: self.fluxHistory.count)
         self.fluxHistoryIndex = 0
+        resetTempoTracker()
     }
 
     private func setupHaptics() throws {
         guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else {
+            NSLog("[Resonate] Core Haptics not supported on this device")
             // Device doesn't support Core Haptics (iPhone 7 and older, iPad).
             // Continue without an engine; band events still flow to JS.
             return
@@ -277,6 +312,7 @@ class MusicHapticEngine: RCTEventEmitter {
         bandEnergyScratch.removeAll(keepingCapacity: false)
         normalizedBandScratch.removeAll(keepingCapacity: false)
         bandEnvelope = Array(repeating: 0.0001, count: MusicHapticEngine.bandWeights.count)
+        resetTempoTracker()
     }
 
     // MARK: - Audio ingest
@@ -377,10 +413,19 @@ class MusicHapticEngine: RCTEventEmitter {
             normalizedBandScratch[b] = powf(raw, 0.7)
         }
 
-        // Haptic drive: bass bands -> intensity, brilliance bands -> sharpness
-        let bassDrive = (normalizedBandScratch[0] * 1.2 + normalizedBandScratch[1] * 1.0) / 2.0
-        let brillianceDrive = (normalizedBandScratch[5] * 0.6 + normalizedBandScratch[6] * 1.0 + normalizedBandScratch[7] * 0.7) / 2.3
-        let intensity = min(max(bassDrive * 0.9 + 0.05, 0.0), 1.0)
+        // Haptic drive: bass controls weight/rumble, treble controls crispness.
+        let intensityGain = settingGain(intensitySetting,
+                                        defaultValue: MusicHapticEngine.defaultIntensitySetting,
+                                        maxGain: 1.45)
+        let bassGain = settingGain(bassBoostSetting,
+                                   defaultValue: MusicHapticEngine.defaultBassBoostSetting,
+                                   maxGain: 1.75)
+        let trebleGain = settingGain(trebleBoostSetting,
+                                     defaultValue: MusicHapticEngine.defaultTrebleBoostSetting,
+                                     maxGain: 1.8)
+        let bassDrive = ((normalizedBandScratch[0] * 1.2 + normalizedBandScratch[1] * 1.0) / 2.0) * bassGain
+        let brillianceDrive = ((normalizedBandScratch[5] * 0.6 + normalizedBandScratch[6] * 1.0 + normalizedBandScratch[7] * 0.7) / 2.3) * trebleGain
+        let intensity = min(max((bassDrive * 0.9 + 0.05) * intensityGain, 0.0), 1.0)
         let sharpness = min(max(brillianceDrive, 0.0), 1.0)
         let now = CACurrentMediaTime()
         if (now - lastHapticTime) >= MusicHapticEngine.hapticIntervalSec {
@@ -399,9 +444,22 @@ class MusicHapticEngine: RCTEventEmitter {
         let fluxStd = sqrtf(fluxVar / Float(fluxHistory.count))
         let threshold = fluxMean + 1.6 * fluxStd
         if flux > threshold && flux > 0.05 && (now - lastBeatTime) > MusicHapticEngine.minBeatInterval {
+            registerDetectedBeat(now: now)
             lastBeatTime = now
             let strength = min((flux - threshold) / max(fluxStd, 0.01), 1.5) / 1.5
-            fireBeat(strength: strength, sharpness: sharpness)
+            fireBeat(strength: strength,
+                     sharpness: sharpness,
+                     intensityGain: intensityGain,
+                     bassGain: bassGain,
+                     trebleGain: trebleGain,
+                     beatTime: now)
+        } else {
+            maybeFireTempoPulse(now: now,
+                                bassDrive: bassDrive,
+                                sharpness: sharpness,
+                                intensityGain: intensityGain,
+                                bassGain: bassGain,
+                                trebleGain: trebleGain)
         }
 
         // Emit JS-facing 4-band summary (throttled)
@@ -432,11 +490,16 @@ class MusicHapticEngine: RCTEventEmitter {
         }
     }
 
-    private func fireBeat(strength: Float, sharpness: Float) {
+    private func fireBeat(strength: Float,
+                          sharpness: Float,
+                          intensityGain: Float,
+                          bassGain: Float,
+                          trebleGain: Float,
+                          beatTime: CFTimeInterval) {
         guard let engine = hapticEngine else { return }
         // Two stacked events: deep thump + crisp tick, weighted by strength.
-        let thumpIntensity = min(0.55 + strength * 0.5, 1.0)
-        let tickIntensity = min(strength * 0.6, 0.8)
+        let thumpIntensity = min((0.55 + strength * 0.5) * intensityGain * (0.55 + 0.45 * bassGain), 1.0)
+        let tickIntensity = min((strength * 0.6) * intensityGain * (0.55 + 0.45 * trebleGain), 0.9)
 
         let thump = CHHapticEvent(
             eventType: .hapticTransient,
@@ -461,6 +524,7 @@ class MusicHapticEngine: RCTEventEmitter {
         } catch {
             // Skip this beat; don't let a transient failure kill the stream.
         }
+        lastPulseTime = beatTime
 
         guard hasListeners else { return }
         sendEvent(withName: "musicHapticBeat", body: ["strength": strength])
@@ -512,5 +576,136 @@ class MusicHapticEngine: RCTEventEmitter {
             sampleBuffer.removeFirst(keepStart)
             sampleBufferStart = 0
         }
+    }
+
+    private func clampSetting(_ value: Any?, defaultValue: Float) -> Float {
+        guard let number = value as? NSNumber else { return defaultValue }
+        return min(max(number.floatValue, 0), 100)
+    }
+
+    private func resetTempoTracker() {
+        tempoIntervals = Array(repeating: 0, count: tempoIntervals.count)
+        tempoIntervalCount = 0
+        tempoIntervalIndex = 0
+        tempoIntervalEstimate = 0
+        tempoConfidence = 0
+        nextTempoBeatTime = 0
+        lastBeatTime = 0
+        lastPulseTime = 0
+    }
+
+    private func registerDetectedBeat(now: CFTimeInterval) {
+        if lastBeatTime > 0 {
+            let normalized = normalizeTempoInterval(now - lastBeatTime)
+            if normalized >= MusicHapticEngine.tempoMinInterval &&
+                normalized <= MusicHapticEngine.tempoMaxInterval {
+                tempoIntervals[tempoIntervalIndex] = Float(normalized)
+                tempoIntervalIndex = (tempoIntervalIndex + 1) % tempoIntervals.count
+                tempoIntervalCount = min(tempoIntervalCount + 1, tempoIntervals.count)
+                recalculateTempoEstimate()
+            }
+        }
+
+        if tempoConfidence >= MusicHapticEngine.tempoMinConfidence &&
+            tempoIntervalEstimate > 0 {
+            nextTempoBeatTime = now + tempoIntervalEstimate
+        } else {
+            nextTempoBeatTime = 0
+        }
+    }
+
+    private func normalizeTempoInterval(_ interval: CFTimeInterval) -> CFTimeInterval {
+        guard tempoIntervalEstimate > 0 else { return interval }
+
+        var best = interval
+        var bestError = abs(interval - tempoIntervalEstimate)
+        let half = interval * 0.5
+        if half >= MusicHapticEngine.tempoMinInterval {
+            let error = abs(half - tempoIntervalEstimate)
+            if error < bestError {
+                best = half
+                bestError = error
+            }
+        }
+        let double = interval * 2.0
+        if double <= MusicHapticEngine.tempoMaxInterval {
+            let error = abs(double - tempoIntervalEstimate)
+            if error < bestError {
+                best = double
+            }
+        }
+        return best
+    }
+
+    private func recalculateTempoEstimate() {
+        guard tempoIntervalCount > 0 else {
+            tempoIntervalEstimate = 0
+            tempoConfidence = 0
+            return
+        }
+
+        var mean: Float = 0
+        for idx in 0..<tempoIntervalCount {
+            mean += tempoIntervals[idx]
+        }
+        mean /= Float(tempoIntervalCount)
+
+        var drift: Float = 0
+        for idx in 0..<tempoIntervalCount {
+            drift += abs(tempoIntervals[idx] - mean) / max(mean, 0.0001)
+        }
+        drift /= Float(tempoIntervalCount)
+
+        tempoIntervalEstimate = CFTimeInterval(mean)
+        let stability = max(0, 1 - drift / MusicHapticEngine.tempoConfidenceDriftTolerance)
+        let coverage = min(Float(tempoIntervalCount) / Float(tempoIntervals.count), 1)
+        tempoConfidence = stability * (0.55 + coverage * 0.45)
+    }
+
+    private func maybeFireTempoPulse(now: CFTimeInterval,
+                                     bassDrive: Float,
+                                     sharpness: Float,
+                                     intensityGain: Float,
+                                     bassGain: Float,
+                                     trebleGain: Float) {
+        guard tempoConfidence >= MusicHapticEngine.tempoMinConfidence,
+              tempoIntervalEstimate > 0,
+              nextTempoBeatTime > 0 else { return }
+
+        while nextTempoBeatTime + MusicHapticEngine.tempoPulseWindow < now {
+            nextTempoBeatTime += tempoIntervalEstimate
+        }
+
+        guard now + MusicHapticEngine.tempoPulseWindow >= nextTempoBeatTime else {
+            return
+        }
+
+        let minSpacing = min(MusicHapticEngine.minBeatInterval * 1.5, tempoIntervalEstimate * 0.5)
+        if now - lastPulseTime < minSpacing {
+            nextTempoBeatTime += tempoIntervalEstimate
+            return
+        }
+
+        let strength = min(
+            max((0.18 + bassDrive * 0.22 + tempoConfidence * 0.2) * MusicHapticEngine.tempoPulseStrengthScale, 0.16),
+            0.42
+        )
+        let scheduledTime = nextTempoBeatTime
+        nextTempoBeatTime += tempoIntervalEstimate
+        fireBeat(strength: strength,
+                 sharpness: sharpness,
+                 intensityGain: intensityGain,
+                 bassGain: bassGain,
+                 trebleGain: trebleGain,
+                 beatTime: scheduledTime)
+    }
+
+    private func settingGain(_ value: Float, defaultValue: Float, maxGain: Float) -> Float {
+        if value <= 0 { return 0 }
+        if value <= defaultValue {
+            return value / defaultValue
+        }
+        let extra = (value - defaultValue) / max(100 - defaultValue, 1)
+        return 1 + extra * (maxGain - 1)
     }
 }

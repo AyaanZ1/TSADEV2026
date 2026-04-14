@@ -45,6 +45,15 @@ class MusicHapticProcessor(
 
         private const val ENV_ATTACK = 0.6f
         private const val ENV_RELEASE = 0.9985f
+        private const val DEFAULT_INTENSITY_SETTING = 72f
+        private const val DEFAULT_BASS_BOOST_SETTING = 55f
+        private const val DEFAULT_TREBLE_BOOST_SETTING = 40f
+        private const val TEMPO_MIN_INTERVAL_SEC = 0.28f
+        private const val TEMPO_MAX_INTERVAL_SEC = 1.1f
+        private const val TEMPO_MIN_CONFIDENCE = 0.72f
+        private const val TEMPO_CONFIDENCE_DRIFT_TOLERANCE = 0.18f
+        private const val TEMPO_PULSE_WINDOW_MS = 50L
+        private const val TEMPO_PULSE_STRENGTH_SCALE = 0.72f
     }
 
     @Volatile private var running = false
@@ -67,10 +76,20 @@ class MusicHapticProcessor(
     private val fluxHistory = FloatArray(43)
     private var fluxIndex = 0
     private var lastBeatMs = 0L
+    private var lastPulseMs = 0L
+    private val tempoIntervals = FloatArray(8)
+    private var tempoIntervalCount = 0
+    private var tempoIntervalIndex = 0
+    private var tempoIntervalEstimateSec = 0f
+    private var tempoConfidence = 0f
+    private var nextTempoBeatMs = 0L
 
     private var lastEmitMs = 0L
     private var lastVibrationMs = 0L
     private var lastContinuousIntensity = -1f
+    @Volatile private var intensitySetting = DEFAULT_INTENSITY_SETTING
+    @Volatile private var bassBoostSetting = DEFAULT_BASS_BOOST_SETTING
+    @Volatile private var trebleBoostSetting = DEFAULT_TREBLE_BOOST_SETTING
 
     // Vibrator
     private val vibrator: Vibrator? = run {
@@ -100,6 +119,12 @@ class MusicHapticProcessor(
         vibrator?.cancel()
     }
 
+    fun updateConfig(intensity: Float, bassBoost: Float, trebleBoost: Float) {
+        intensitySetting = clampSetting(intensity)
+        bassBoostSetting = clampSetting(bassBoost)
+        trebleBoostSetting = clampSetting(trebleBoost)
+    }
+
     private fun resetState() {
         sampleLen = 0
         java.util.Arrays.fill(prevMag, 0f)
@@ -107,9 +132,16 @@ class MusicHapticProcessor(
         fluxIndex = 0
         for (i in bandEnvelope.indices) bandEnvelope[i] = 0.0001f
         lastBeatMs = 0L
+        lastPulseMs = 0L
         lastEmitMs = 0L
         lastVibrationMs = 0L
         lastContinuousIntensity = -1f
+        java.util.Arrays.fill(tempoIntervals, 0f)
+        tempoIntervalCount = 0
+        tempoIntervalIndex = 0
+        tempoIntervalEstimateSec = 0f
+        tempoConfidence = 0f
+        nextTempoBeatMs = 0L
     }
 
     // Called on the coordinator's IO thread — do work here to keep audio path tight.
@@ -184,10 +216,14 @@ class MusicHapticProcessor(
             normalizedBands[b] = Math.pow(raw.toDouble(), 0.7).toFloat()
         }
 
-        // Haptic drive
-        val bassDrive = (normalizedBands[0] * 1.2f + normalizedBands[1] * 1.0f) / 2f
-        val brillianceDrive = (normalizedBands[5] * 0.6f + normalizedBands[6] * 1.0f + normalizedBands[7] * 0.7f) / 2.3f
-        val intensity = min(max(bassDrive * 0.9f + 0.05f, 0f), 1f)
+        // Haptic drive: global intensity scales everything, bass adds weight,
+        // treble adds crispness.
+        val intensityGain = settingGain(intensitySetting, DEFAULT_INTENSITY_SETTING, 1.45f)
+        val bassGain = settingGain(bassBoostSetting, DEFAULT_BASS_BOOST_SETTING, 1.75f)
+        val trebleGain = settingGain(trebleBoostSetting, DEFAULT_TREBLE_BOOST_SETTING, 1.8f)
+        val bassDrive = ((normalizedBands[0] * 1.2f + normalizedBands[1] * 1.0f) / 2f) * bassGain
+        val brillianceDrive = ((normalizedBands[5] * 0.6f + normalizedBands[6] * 1.0f + normalizedBands[7] * 0.7f) / 2.3f) * trebleGain
+        val intensity = min(max((bassDrive * 0.9f + 0.05f) * intensityGain, 0f), 1f)
         val sharpness = min(max(brillianceDrive, 0f), 1f)
 
         // Onset detection
@@ -202,10 +238,13 @@ class MusicHapticProcessor(
         val threshold = mean + 1.6f * std
         val now = System.currentTimeMillis()
         if (flux > threshold && flux > 0.05f && (now - lastBeatMs) > MIN_BEAT_INTERVAL_MS) {
+            registerDetectedBeat(now)
             lastBeatMs = now
             val raw = (flux - threshold) / max(std, 0.01f)
             val strength = min(raw / 1.5f, 1f)
-            fireBeat(strength)
+            fireBeat(strength, intensityGain, bassGain, trebleGain, now)
+        } else {
+            maybeFireTempoPulse(now, bassDrive, intensityGain, bassGain, trebleGain)
         }
 
         updateContinuousVibration(intensity, now)
@@ -251,26 +290,40 @@ class MusicHapticProcessor(
         } catch (_: Throwable) {}
     }
 
-    private fun fireBeat(strength: Float) {
+    private fun fireBeat(
+        strength: Float,
+        intensityGain: Float,
+        bassGain: Float,
+        trebleGain: Float,
+        beatTimeMs: Long
+    ) {
         val v = vibrator ?: return
         if (!v.hasVibrator()) return
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val scale = strength.coerceIn(0.2f, 1f)
+                val scale = (strength * intensityGain * (0.55f + 0.45f * bassGain)).coerceIn(0.2f, 1f)
                 val composition = VibrationEffect.startComposition()
                     .addPrimitive(VibrationEffect.Composition.PRIMITIVE_THUD, scale)
-                    .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, (scale * 0.7f).coerceAtLeast(0.1f), 30)
+                    .addPrimitive(
+                        VibrationEffect.Composition.PRIMITIVE_TICK,
+                        (scale * (0.45f + 0.25f * trebleGain)).coerceAtLeast(0.1f).coerceAtMost(1f),
+                        30
+                    )
                     .compose()
                 v.vibrate(composition)
             } else {
                 val amp = if (hasAmplitudeControl)
-                    ((0.5f + strength * 0.5f) * 255f).toInt().coerceIn(1, 255)
+                    (((0.5f + strength * 0.5f) * intensityGain * (0.55f + 0.45f * bassGain)) * 255f)
+                        .toInt()
+                        .coerceIn(1, 255)
                 else VibrationEffect.DEFAULT_AMPLITUDE
                 val dur = (60L + (strength * 40).toLong())
                 v.vibrate(VibrationEffect.createOneShot(dur, amp))
             }
         } catch (_: Throwable) {}
+
+        lastPulseMs = beatTimeMs
 
         onBeat(strength)
     }
@@ -286,6 +339,122 @@ class MusicHapticProcessor(
         }
         val amp = (uiBands[0] + uiBands[1] + uiBands[2] + uiBands[3]) / 4f
         onFrame(uiBands, amp, intensity, sharpness)
+    }
+
+    private fun clampSetting(value: Float): Float = value.coerceIn(0f, 100f)
+
+    private fun settingGain(value: Float, defaultValue: Float, maxGain: Float): Float {
+        if (value <= 0f) return 0f
+        if (value <= defaultValue) return value / defaultValue
+        val extra = (value - defaultValue) / max(100f - defaultValue, 1f)
+        return 1f + extra * (maxGain - 1f)
+    }
+
+    private fun registerDetectedBeat(nowMs: Long) {
+        if (lastBeatMs > 0L) {
+            val normalized = normalizeTempoInterval((nowMs - lastBeatMs) / 1000f)
+            if (normalized in TEMPO_MIN_INTERVAL_SEC..TEMPO_MAX_INTERVAL_SEC) {
+                tempoIntervals[tempoIntervalIndex] = normalized
+                tempoIntervalIndex = (tempoIntervalIndex + 1) % tempoIntervals.size
+                tempoIntervalCount = min(tempoIntervalCount + 1, tempoIntervals.size)
+                recalculateTempoEstimate()
+            }
+        }
+
+        nextTempoBeatMs = if (
+            tempoConfidence >= TEMPO_MIN_CONFIDENCE &&
+            tempoIntervalEstimateSec > 0f
+        ) {
+            nowMs + (tempoIntervalEstimateSec * 1000f).toLong()
+        } else {
+            0L
+        }
+    }
+
+    private fun normalizeTempoInterval(intervalSec: Float): Float {
+        if (tempoIntervalEstimateSec <= 0f) return intervalSec
+
+        var best = intervalSec
+        var bestError = kotlin.math.abs(intervalSec - tempoIntervalEstimateSec)
+        val half = intervalSec * 0.5f
+        if (half >= TEMPO_MIN_INTERVAL_SEC) {
+            val error = kotlin.math.abs(half - tempoIntervalEstimateSec)
+            if (error < bestError) {
+                best = half
+                bestError = error
+            }
+        }
+        val double = intervalSec * 2f
+        if (double <= TEMPO_MAX_INTERVAL_SEC) {
+            val error = kotlin.math.abs(double - tempoIntervalEstimateSec)
+            if (error < bestError) {
+                best = double
+            }
+        }
+        return best
+    }
+
+    private fun recalculateTempoEstimate() {
+        if (tempoIntervalCount == 0) {
+            tempoIntervalEstimateSec = 0f
+            tempoConfidence = 0f
+            return
+        }
+
+        var mean = 0f
+        for (idx in 0 until tempoIntervalCount) {
+            mean += tempoIntervals[idx]
+        }
+        mean /= tempoIntervalCount
+
+        var drift = 0f
+        for (idx in 0 until tempoIntervalCount) {
+            drift += kotlin.math.abs(tempoIntervals[idx] - mean) / max(mean, 0.0001f)
+        }
+        drift /= tempoIntervalCount
+
+        tempoIntervalEstimateSec = mean
+        val stability = max(0f, 1f - drift / TEMPO_CONFIDENCE_DRIFT_TOLERANCE)
+        val coverage = min(tempoIntervalCount / tempoIntervals.size.toFloat(), 1f)
+        tempoConfidence = stability * (0.55f + coverage * 0.45f)
+    }
+
+    private fun maybeFireTempoPulse(
+        nowMs: Long,
+        bassDrive: Float,
+        intensityGain: Float,
+        bassGain: Float,
+        trebleGain: Float
+    ) {
+        if (
+            tempoConfidence < TEMPO_MIN_CONFIDENCE ||
+            tempoIntervalEstimateSec <= 0f ||
+            nextTempoBeatMs <= 0L
+        ) {
+            return
+        }
+
+        while (nextTempoBeatMs + TEMPO_PULSE_WINDOW_MS < nowMs) {
+            nextTempoBeatMs += (tempoIntervalEstimateSec * 1000f).toLong()
+        }
+
+        if (nowMs + TEMPO_PULSE_WINDOW_MS < nextTempoBeatMs) {
+            return
+        }
+
+        val minSpacingMs = min((MIN_BEAT_INTERVAL_MS * 1.5f).toLong(), (tempoIntervalEstimateSec * 500f).toLong())
+        if (nowMs - lastPulseMs < minSpacingMs) {
+            nextTempoBeatMs += (tempoIntervalEstimateSec * 1000f).toLong()
+            return
+        }
+
+        val strength = min(
+            max((0.18f + bassDrive * 0.22f + tempoConfidence * 0.2f) * TEMPO_PULSE_STRENGTH_SCALE, 0.16f),
+            0.42f
+        )
+        val scheduledBeatMs = nextTempoBeatMs
+        nextTempoBeatMs += (tempoIntervalEstimateSec * 1000f).toLong()
+        fireBeat(strength, intensityGain, bassGain, trebleGain, scheduledBeatMs)
     }
 
     // ---- Pure Kotlin radix-2 Cooley-Tukey FFT (in-place). Fine for 2048 samples. ----

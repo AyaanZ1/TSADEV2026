@@ -4,6 +4,7 @@ const {MusicHapticEngine} = NativeModules as {
   MusicHapticEngine?: {
     start: () => Promise<void>;
     stop: () => Promise<void>;
+    setConfig: (config: MusicHapticConfig) => void;
   };
 };
 
@@ -29,7 +30,22 @@ export type MusicHapticBeat = {
 type FrameListener = (frame: MusicHapticFrame) => void;
 type BeatListener = (beat: MusicHapticBeat) => void;
 
+export type MusicHapticConfig = {
+  intensity: number;
+  bassBoost: number;
+  trebleBoost: number;
+};
+
+const DEFAULT_CONFIG: MusicHapticConfig = {
+  intensity: 72,
+  bassBoost: 55,
+  trebleBoost: 40,
+};
+
 let running = false;
+let currentConfig: MusicHapticConfig = DEFAULT_CONFIG;
+
+const clampSetting = (value: number) => Math.max(0, Math.min(100, value));
 
 export const MusicHapticService = {
   isSupported: !!MusicHapticEngine,
@@ -40,6 +56,7 @@ export const MusicHapticService = {
     try {
       await MusicHapticEngine.start();
       running = true;
+      MusicHapticEngine.setConfig(currentConfig);
     } catch (error) {
       if (__DEV__) {
         console.warn('[MusicHapticService] start failed', error);
@@ -56,6 +73,24 @@ export const MusicHapticService = {
     } catch (error) {
       if (__DEV__) {
         console.warn('[MusicHapticService] stop failed', error);
+      }
+    }
+  },
+
+  setConfig: (config: MusicHapticConfig) => {
+    currentConfig = {
+      intensity: clampSetting(config.intensity),
+      bassBoost: clampSetting(config.bassBoost),
+      trebleBoost: clampSetting(config.trebleBoost),
+    };
+
+    if (!MusicHapticEngine) return;
+
+    try {
+      MusicHapticEngine.setConfig(currentConfig);
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('[MusicHapticService] setConfig failed', error);
       }
     }
   },
