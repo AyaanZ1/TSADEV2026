@@ -18,7 +18,7 @@ class ShazamKitRecognition: RCTEventEmitter {
     }
 
     override func supportedEvents() -> [String]! {
-        return ["shazamAmplitude"]
+        return ["shazamAmplitude", "shazamMatch"]
     }
 
     @objc
@@ -53,9 +53,10 @@ class ShazamKitRecognition: RCTEventEmitter {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.stopListening()
-            guard !self.hasResolved else { return }
-            self.hasResolved = true
-            self.recognitionReject?("CANCELLED", "Recognition cancelled by user", nil)
+            if !self.hasResolved {
+                self.hasResolved = true
+                self.recognitionReject?("CANCELLED", "Recognition cancelled by user", nil)
+            }
             self.cleanup()
         }
     }
@@ -132,6 +133,7 @@ class ShazamKitRecognition: RCTEventEmitter {
         recognitionReject = nil
         session = nil
         signatureCount = 0
+        hasResolved = false
     }
 }
 
@@ -139,9 +141,6 @@ extension ShazamKitRecognition: SHSessionDelegate {
     func session(_ session: SHSession, didFind match: SHMatch) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.stopListening()
-            guard !self.hasResolved else { return }
-            self.hasResolved = true
 
             if let item = match.mediaItems.first {
                 // Replace Apple Music artwork size placeholders
@@ -156,11 +155,24 @@ extension ShazamKitRecognition: SHSessionDelegate {
                     "genres": item.genres,
                     "matchOffset": item.predictedCurrentMatchOffset
                 ]
-                self.recognitionResolve?(metadata)
+                self.sendEvent(withName: "shazamMatch", body: metadata)
+
+                if !self.hasResolved {
+                    self.hasResolved = true
+                    self.timeoutTimer?.invalidate()
+                    self.timeoutTimer = nil
+                    self.recognitionResolve?(metadata)
+                    self.recognitionResolve = nil
+                    self.recognitionReject = nil
+                }
             } else {
-                self.recognitionReject?("NO_MATCH", "No media items found in match", nil)
+                if !self.hasResolved {
+                    self.hasResolved = true
+                    self.recognitionReject?("NO_MATCH", "No media items found in match", nil)
+                    self.recognitionResolve = nil
+                    self.recognitionReject = nil
+                }
             }
-            self.cleanup()
         }
     }
 

@@ -1,10 +1,10 @@
-const { NativeModules } = require('react-native');
+const {NativeModules} = require('react-native');
 
 jest.mock('react-native-linear-gradient', () => 'LinearGradient');
 
 jest.mock('@react-native-community/blur', () => {
-  const { View } = require('react-native');
-  return { BlurView: View };
+  const {View} = require('react-native');
+  return {BlurView: View};
 });
 
 jest.mock('react-native-haptic-feedback', () => ({
@@ -13,8 +13,8 @@ jest.mock('react-native-haptic-feedback', () => ({
 
 jest.mock('react-native-svg', () => {
   const React = require('react');
-  const { View } = require('react-native');
-  const Mock = (props) => React.createElement(View, props);
+  const {View} = require('react-native');
+  const Mock = props => React.createElement(View, props);
   return {
     __esModule: true,
     default: Mock,
@@ -62,6 +62,13 @@ if (!NativeModules.AppIconModule) {
   };
 }
 
+if (!NativeModules.AudioSessionTuner) {
+  NativeModules.AudioSessionTuner = {
+    configureForSpeechCapture: jest.fn(() => Promise.resolve(null)),
+    deactivate: jest.fn(() => Promise.resolve()),
+  };
+}
+
 if (!NativeModules.ShazamKitRecognition) {
   NativeModules.ShazamKitRecognition = {
     identify: jest.fn(() =>
@@ -70,7 +77,7 @@ if (!NativeModules.ShazamKitRecognition) {
         artist: 'Test Artist',
         artworkURL: '',
         matchOffset: 0,
-      })
+      }),
     ),
     stop: jest.fn(),
     addListener: jest.fn(),

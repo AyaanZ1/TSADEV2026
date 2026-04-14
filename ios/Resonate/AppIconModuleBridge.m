@@ -14,4 +14,14 @@ RCT_EXTERN_METHOD(getIcon:(RCTPromiseResolveBlock)resolve
 
 @end
 
+@interface RCT_EXTERN_MODULE(AudioSessionTuner, NSObject)
+
+RCT_EXTERN_METHOD(configureForSpeechCapture:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(deactivate:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+
+@end
+
 #pragma clang diagnostic pop
