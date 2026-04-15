@@ -50,6 +50,10 @@ class MusicHapticProcessor(
         private const val TEMPO_CONFIDENCE_DRIFT_TOLERANCE = 0.18f
         private const val TEMPO_PULSE_WINDOW_MS = 50L
         private const val TEMPO_PULSE_STRENGTH_SCALE = 0.72f
+
+        // ~250-frame window (~12s) for input loudness norm.
+        private const val LOUDNESS_TRACK_ALPHA = 0.004f
+        private const val CONTINUITY_FLOOR = 0.22f
     }
 
     @Volatile private var running = false
@@ -83,6 +87,8 @@ class MusicHapticProcessor(
     private var lastEmitMs = 0L
     private var lastVibrationMs = 0L
     private var lastContinuousIntensity = -1f
+    private var avgInputAmplitude = 0.005f
+    private var smoothedIntensity = 0f
     @Volatile private var intensitySetting = DEFAULT_INTENSITY_SETTING
     @Volatile private var bassBoostSetting = DEFAULT_BASS_BOOST_SETTING
     @Volatile private var trebleBoostSetting = DEFAULT_TREBLE_BOOST_SETTING
@@ -132,6 +138,8 @@ class MusicHapticProcessor(
         lastEmitMs = 0L
         lastVibrationMs = 0L
         lastContinuousIntensity = -1f
+        avgInputAmplitude = 0.005f
+        smoothedIntensity = 0f
         java.util.Arrays.fill(tempoIntervals, 0f)
         tempoIntervalCount = 0
         tempoIntervalIndex = 0
@@ -140,7 +148,7 @@ class MusicHapticProcessor(
         nextTempoBeatMs = 0L
     }
 
-    // Called on the coordinator's IO thread — do work here to keep audio path tight.
+    // Called on the coordinator's IO thread. Do work here to keep the audio path tight.
     private fun ingest(bytes: ByteArray, byteLen: Int) {
         if (!running) return
         val frames = byteLen / 2
@@ -212,6 +220,16 @@ class MusicHapticProcessor(
             normalizedBands[b] = Math.pow(raw.toDouble(), 0.7).toFloat()
         }
 
+        // Track raw input loudness (pre-AGC) so we can scale haptics against a running norm.
+        var sumSq = 0f
+        for (i in 0 until FFT_SIZE) {
+            val s = sampleBuf[i] * window[i]
+            sumSq += s * s
+        }
+        val rms = sqrt(sumSq / FFT_SIZE)
+        avgInputAmplitude = avgInputAmplitude * (1f - LOUDNESS_TRACK_ALPHA) + rms * LOUDNESS_TRACK_ALPHA
+        val loudnessRatio = min(max(rms / max(avgInputAmplitude, 0.0005f), 0.25f), 2f)
+
         // Haptic drive: global intensity scales everything, bass adds weight,
         // treble adds crispness.
         val intensityGain = settingGain(intensitySetting, DEFAULT_INTENSITY_SETTING, 1.45f)
@@ -219,8 +237,16 @@ class MusicHapticProcessor(
         val trebleGain = settingGain(trebleBoostSetting, DEFAULT_TREBLE_BOOST_SETTING, 1.8f)
         val bassDrive = ((normalizedBands[0] * 1.2f + normalizedBands[1] * 1.0f) / 2f) * bassGain
         val brillianceDrive = ((normalizedBands[5] * 0.6f + normalizedBands[6] * 1.0f + normalizedBands[7] * 0.7f) / 2.3f) * trebleGain
-        val intensity = min(max((bassDrive * 0.9f + 0.05f) * intensityGain, 0f), 1f)
-        val sharpness = min(max(brillianceDrive, 0f), 1f)
+
+        // Continuous baseline buzz. Scales with how loud "now" is vs the running norm.
+        val baseline = min(max(loudnessRatio * 0.38f, CONTINUITY_FLOOR * 0.7f), 0.75f)
+        // Bass + treble spike on top of the baseline.
+        val dynamic = bassDrive * 0.55f + brillianceDrive * 0.42f
+        val rawIntensity = min(max((baseline + dynamic) * intensityGain, 0f), 1f)
+        // Smooth so we don't jitter between frames.
+        smoothedIntensity = smoothedIntensity * 0.55f + rawIntensity * 0.45f
+        val intensity = smoothedIntensity
+        val sharpness = min(max(brillianceDrive * 0.8f + 0.25f, 0f), 1f)
 
         // Onset detection
         fluxHistory[fluxIndex] = flux
@@ -251,20 +277,21 @@ class MusicHapticProcessor(
         }
     }
 
-    // Ongoing hum — a quick low-amplitude oneshot re-issued every frame tracks
+    // Ongoing hum: a quick low-amplitude oneshot re-issued every frame tracks
     // the bass envelope. The Android motor can't do intensity modulation on a
     // running effect, but back-to-back oneshots produce a continuous feel.
     private fun updateContinuousVibration(intensity: Float, now: Long) {
         val v = vibrator ?: return
         if (!v.hasVibrator()) return
 
-        // Skip near-silent frames so we don't buzz continuously during quiet passages
-        if (intensity < 0.08f) return
+        // Drop obviously-dead frames (post-stop, silence). The baseline keeps
+        // active audio above ~0.15 so this doesn't fight continuity.
+        if (intensity < 0.05f) return
 
         val amp = if (hasAmplitudeControl) {
             (intensity * 255f).toInt().coerceIn(1, 255)
         } else {
-            // No amplitude control — gate by duty cycle instead (skip weaker frames).
+            // No amplitude control, so gate by duty cycle instead (skip weaker frames).
             if (intensity < 0.3f) return
             VibrationEffect.DEFAULT_AMPLITUDE
         }

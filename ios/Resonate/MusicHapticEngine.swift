@@ -98,6 +98,11 @@ class MusicHapticEngine: RCTEventEmitter {
     private var lastHapticTime: CFTimeInterval = 0
     private static let hapticIntervalSec: CFTimeInterval = 0.042 // ~24 Hz, well under 32 Hz XPC limit
 
+    private var avgInputAmplitude: Float = 0.005
+    private var smoothedIntensity: Float = 0
+    private static let loudnessTrackAlpha: Float = 0.004 // ~250-frame window (~12s at 20 Hz)
+    private static let continuityFloor: Float = 0.22 // alarm-style baseline
+
     // MARK: - RCT lifecycle
 
     @objc override static func requiresMainQueueSetup() -> Bool { return false }
@@ -303,6 +308,8 @@ class MusicHapticEngine: RCTEventEmitter {
         bandEnergyScratch.removeAll(keepingCapacity: false)
         normalizedBandScratch.removeAll(keepingCapacity: false)
         bandEnvelope = Array(repeating: 0.0001, count: MusicHapticEngine.bandWeights.count)
+        avgInputAmplitude = 0.005
+        smoothedIntensity = 0
         resetTempoTracker()
     }
 
@@ -404,6 +411,14 @@ class MusicHapticEngine: RCTEventEmitter {
             normalizedBandScratch[b] = powf(raw, 0.7)
         }
 
+        // Track raw input loudness (pre-AGC) so we can scale haptics against a running norm.
+        var rms: Float = 0
+        vDSP_rmsqv(windowedSamples, 1, &rms, vDSP_Length(n))
+        avgInputAmplitude = avgInputAmplitude * (1 - MusicHapticEngine.loudnessTrackAlpha)
+            + rms * MusicHapticEngine.loudnessTrackAlpha
+        // Ratio of "now" vs "norm". Clamp so a silent room doesn't explode and a jet engine doesn't pin us.
+        let loudnessRatio = min(max(rms / max(avgInputAmplitude, 0.0005), 0.25), 2.0)
+
         // Haptic drive: bass controls weight/rumble, treble controls crispness.
         let intensityGain = settingGain(intensitySetting,
                                         defaultValue: MusicHapticEngine.defaultIntensitySetting,
@@ -416,8 +431,17 @@ class MusicHapticEngine: RCTEventEmitter {
                                      maxGain: 1.8)
         let bassDrive = ((normalizedBandScratch[0] * 1.2 + normalizedBandScratch[1] * 1.0) / 2.0) * bassGain
         let brillianceDrive = ((normalizedBandScratch[5] * 0.6 + normalizedBandScratch[6] * 1.0 + normalizedBandScratch[7] * 0.7) / 2.3) * trebleGain
-        let intensity = min(max((bassDrive * 0.9 + 0.05) * intensityGain, 0.0), 1.0)
-        let sharpness = min(max(brillianceDrive, 0.0), 1.0)
+
+        // Continuous baseline buzz. Scales with how loud "now" is vs the running norm.
+        // Quiet section ≈ 0.15, around average ≈ 0.38, loud section ≈ 0.75.
+        let baseline = min(max(loudnessRatio * 0.38, MusicHapticEngine.continuityFloor * 0.7), 0.75)
+        // Bass + treble spike on top of the baseline.
+        let dynamic = bassDrive * 0.55 + brillianceDrive * 0.42
+        let rawIntensity = min(max((baseline + dynamic) * intensityGain, 0.0), 1.0)
+        // Smooth so we don't jitter between frames. Keeps the buzz feeling continuous.
+        smoothedIntensity = smoothedIntensity * 0.55 + rawIntensity * 0.45
+        let intensity = smoothedIntensity
+        let sharpness = min(max(brillianceDrive * 0.8 + 0.25, 0.0), 1.0)
         let now = CACurrentMediaTime()
         if (now - lastHapticTime) >= MusicHapticEngine.hapticIntervalSec {
             lastHapticTime = now
@@ -531,8 +555,8 @@ class MusicHapticEngine: RCTEventEmitter {
             for g in group { sum += bandNormalized[g] }
             uiBandScratch[idx] = sum / Float(group.count)
         }
-        // Exaggerate a little — the old pipeline looked flat because raw RMS
-        // sits in the 0.1–0.2 range. These values are already normalized by
+        // Exaggerate a little. The old pipeline looked flat because raw RMS
+        // sits in the 0.1 to 0.2 range. These values are already normalized by
         // AGC so scaling up to ~[0,1] feels right on the waveform.
         for idx in uiBandScratch.indices {
             uiBandScratch[idx] = min(powf(uiBandScratch[idx], 0.55) * 1.15, 1.0)
