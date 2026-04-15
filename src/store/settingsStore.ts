@@ -34,7 +34,10 @@ interface SettingsState {
   applyPreset: (name: string) => void;
 }
 
-const PRESET_VALUES: Record<string, {intensity: number; bassBoost: number; trebleBoost: number}> = {
+const PRESET_VALUES: Record<
+  string,
+  {intensity: number; bassBoost: number; trebleBoost: number}
+> = {
   Concert: {intensity: 72, bassBoost: 55, trebleBoost: 40},
   EDM: {intensity: 88, bassBoost: 90, trebleBoost: 48},
   Classical: {intensity: 54, bassBoost: 42, trebleBoost: 58},
@@ -43,7 +46,7 @@ const PRESET_VALUES: Record<string, {intensity: number; bassBoost: number; trebl
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    set => ({
       theme: 'dark',
       appLanguage: 'English',
       defaultLyricLang: 'EN',
@@ -53,15 +56,15 @@ export const useSettingsStore = create<SettingsState>()(
       trebleBoost: 40,
       activePreset: null,
 
-      setTheme: (theme) => set({theme}),
-      setAppLanguage: (appLanguage) => set({appLanguage}),
-      setDefaultLyricLang: (defaultLyricLang) => set({defaultLyricLang}),
-      setFontSize: (fontSize) => set({fontSize}),
-      setIntensity: (intensity) => set({intensity, activePreset: null}),
-      setBassBoost: (bassBoost) => set({bassBoost, activePreset: null}),
-      setTrebleBoost: (trebleBoost) => set({trebleBoost, activePreset: null}),
-      setActivePreset: (activePreset) => set({activePreset}),
-      applyPreset: (name) => {
+      setTheme: theme => set({theme}),
+      setAppLanguage: appLanguage => set({appLanguage}),
+      setDefaultLyricLang: defaultLyricLang => set({defaultLyricLang}),
+      setFontSize: fontSize => set({fontSize}),
+      setIntensity: intensity => set({intensity, activePreset: null}),
+      setBassBoost: bassBoost => set({bassBoost, activePreset: null}),
+      setTrebleBoost: trebleBoost => set({trebleBoost, activePreset: null}),
+      setActivePreset: activePreset => set({activePreset}),
+      applyPreset: name => {
         const vals = PRESET_VALUES[name];
         if (vals) {
           set({activePreset: name, ...vals});

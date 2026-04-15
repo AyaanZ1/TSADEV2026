@@ -12,13 +12,13 @@ const emitter = MusicHapticEngine
   ? new NativeEventEmitter(MusicHapticEngine as any)
   : null;
 
+const EMPTY_SUBSCRIPTION = {
+  remove: () => {},
+};
+
 export type MusicHapticFrame = {
-  // Four bands [bass, low-mid, mid-high, treble], each 0..1 AGC-normalized.
   bands: [number, number, number, number];
-  // Average across bands — safe to drive a single-value amplitude meter.
   amplitude: number;
-  // Current haptic intensity / sharpness the native engine is using.
-  // Exposed for UI feedback; not required to consume.
   intensity: number;
   sharpness: number;
 };
@@ -46,13 +46,26 @@ let running = false;
 let currentConfig: MusicHapticConfig = DEFAULT_CONFIG;
 
 const clampSetting = (value: number) => Math.max(0, Math.min(100, value));
+const toNumber = (value: unknown) => Number(value ?? 0);
+
+const parseBands = (rawBands: unknown): [number, number, number, number] => {
+  const values = Array.isArray(rawBands) ? rawBands : [];
+  return [
+    toNumber(values[0]),
+    toNumber(values[1]),
+    toNumber(values[2]),
+    toNumber(values[3]),
+  ];
+};
 
 export const MusicHapticService = {
   isSupported: !!MusicHapticEngine,
 
   start: async (): Promise<void> => {
-    if (!MusicHapticEngine) return;
-    if (running) return;
+    if (!MusicHapticEngine || running) {
+      return;
+    }
+
     try {
       await MusicHapticEngine.start();
       running = true;
@@ -65,8 +78,10 @@ export const MusicHapticService = {
   },
 
   stop: async (): Promise<void> => {
-    if (!MusicHapticEngine) return;
-    if (!running) return;
+    if (!MusicHapticEngine || !running) {
+      return;
+    }
+
     running = false;
     try {
       await MusicHapticEngine.stop();
@@ -84,7 +99,9 @@ export const MusicHapticService = {
       trebleBoost: clampSetting(config.trebleBoost),
     };
 
-    if (!MusicHapticEngine) return;
+    if (!MusicHapticEngine) {
+      return;
+    }
 
     try {
       MusicHapticEngine.setConfig(currentConfig);
@@ -96,30 +113,27 @@ export const MusicHapticService = {
   },
 
   addFrameListener: (cb: FrameListener) => {
-    if (!emitter) return {remove: () => {}};
-    const sub = emitter.addListener('musicHapticFrame', (data: any) => {
-      const rawBands = Array.isArray(data?.bands) ? data.bands : [0, 0, 0, 0];
-      const bands: [number, number, number, number] = [
-        Number(rawBands[0] ?? 0),
-        Number(rawBands[1] ?? 0),
-        Number(rawBands[2] ?? 0),
-        Number(rawBands[3] ?? 0),
-      ];
+    if (!emitter) {
+      return EMPTY_SUBSCRIPTION;
+    }
+
+    return emitter.addListener('musicHapticFrame', (data: any) => {
       cb({
-        bands,
-        amplitude: Number(data?.amplitude ?? 0),
-        intensity: Number(data?.intensity ?? 0),
-        sharpness: Number(data?.sharpness ?? 0),
+        bands: parseBands(data?.bands),
+        amplitude: toNumber(data?.amplitude),
+        intensity: toNumber(data?.intensity),
+        sharpness: toNumber(data?.sharpness),
       });
     });
-    return sub;
   },
 
   addBeatListener: (cb: BeatListener) => {
-    if (!emitter) return {remove: () => {}};
-    const sub = emitter.addListener('musicHapticBeat', (data: any) => {
+    if (!emitter) {
+      return EMPTY_SUBSCRIPTION;
+    }
+
+    return emitter.addListener('musicHapticBeat', (data: any) => {
       cb({strength: Number(data?.strength ?? 0)});
     });
-    return sub;
   },
 };

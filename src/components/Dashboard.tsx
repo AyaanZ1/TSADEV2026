@@ -8,7 +8,6 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
-  Switch,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -39,7 +38,12 @@ import {
 import {LRCLIBService, LRCLine} from '../services/LRCLIBService';
 import AppIcon, {AppIconName} from '../NativeModules/AppIconModule';
 import {LyricSyncEngine} from '../services/LyricSyncEngine';
-import {useSettingsStore, ThemeMode, LyricLanguageCode, AppLanguage} from '../store/settingsStore';
+import {
+  useSettingsStore,
+  ThemeMode,
+  LyricLanguageCode,
+  AppLanguage,
+} from '../store/settingsStore';
 import {t} from '../i18n/translations';
 
 type Tab = 'listen' | 'haptic' | 'settings';
@@ -122,8 +126,13 @@ const SAME_SONG_ANCHOR_AGREEMENT_SEC = 0.45;
 const SAME_SONG_BACKWARD_IGNORE_SEC = 0.8;
 const SAME_SONG_BACKWARD_CONFIRMATIONS = 4;
 const SAME_SONG_BACKWARD_MIN_STABILITY_MS = 2200;
+const DEFAULT_MIC_BANDS: [number, number, number, number] = [30, 22, 18, 12];
+const MARQUEE_GAP = 48;
+const WAVE_TIME_STEPS: [number, number, number, number] = [
+  0.016, 0.022, 0.03, 0.04,
+];
+const WAVE_IDLE_STEP = 0.006;
 
-// Glow orb using SVG radial gradient for smooth falloff
 const GlowOrb = ({
   id,
   color,
@@ -154,7 +163,9 @@ const GlowOrb = ({
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const bandValues = energyIndices.map(index => bandsRef.current[index] ?? 0);
+      const bandValues = energyIndices.map(
+        index => bandsRef.current[index] ?? 0,
+      );
       const rawEnergy =
         bandValues.reduce((sum, value) => sum + value, 0) /
         Math.max(bandValues.length, 1) /
@@ -168,11 +179,12 @@ const GlowOrb = ({
     return () => clearInterval(interval);
   }, [active, bandsRef, energyIndices, frameIntervalMs]);
 
-  const t = timeRef.current;
+  const phaseTime = timeRef.current;
   const energy = smoothedEnergyRef.current;
-  const driftX = Math.sin(t * 1.15 + phase * 0.7) * (10 + energy * 18);
-  const driftY = Math.cos(t * 0.92 + phase * 1.3) * (8 + energy * 14);
-  const scale = 0.96 + energy * 0.18 + Math.sin(t * 0.85 + phase) * 0.03;
+  const driftX = Math.sin(phaseTime * 1.15 + phase * 0.7) * (10 + energy * 18);
+  const driftY = Math.cos(phaseTime * 0.92 + phase * 1.3) * (8 + energy * 14);
+  const scale =
+    0.96 + energy * 0.18 + Math.sin(phaseTime * 0.85 + phase) * 0.03;
   const mainRx = size * (0.47 + energy * 0.025);
   const mainRy = size * (0.41 + energy * 0.04);
   const innerRx = size * (0.31 + energy * 0.03);
@@ -192,31 +204,59 @@ const GlowOrb = ({
           width: size,
           height: size,
           opacity: breatheAnim,
-          transform: [
-            {translateX: driftX},
-            {translateY: driftY},
-            {scale},
-          ],
+          transform: [{translateX: driftX}, {translateY: driftY}, {scale}],
         },
         style,
       ]}>
       <Svg width={size} height={size}>
         <Defs>
           <RadialGradient id={`${id}-halo`} cx="50%" cy="46%" r="54%">
-            <Stop offset="0%" stopColor={color} stopOpacity={haloOpacity * 0.5} />
-            <Stop offset="28%" stopColor={color} stopOpacity={haloOpacity * 0.24} />
-            <Stop offset="62%" stopColor={color} stopOpacity={haloOpacity * 0.08} />
+            <Stop
+              offset="0%"
+              stopColor={color}
+              stopOpacity={haloOpacity * 0.5}
+            />
+            <Stop
+              offset="28%"
+              stopColor={color}
+              stopOpacity={haloOpacity * 0.24}
+            />
+            <Stop
+              offset="62%"
+              stopColor={color}
+              stopOpacity={haloOpacity * 0.08}
+            />
             <Stop offset="100%" stopColor={color} stopOpacity={0} />
           </RadialGradient>
           <RadialGradient id={`${id}-core`} cx="44%" cy="38%" r="48%">
-            <Stop offset="0%" stopColor={color} stopOpacity={coreOpacity * 0.62} />
-            <Stop offset="22%" stopColor={color} stopOpacity={coreOpacity * 0.32} />
-            <Stop offset="58%" stopColor={color} stopOpacity={coreOpacity * 0.08} />
+            <Stop
+              offset="0%"
+              stopColor={color}
+              stopOpacity={coreOpacity * 0.62}
+            />
+            <Stop
+              offset="22%"
+              stopColor={color}
+              stopOpacity={coreOpacity * 0.32}
+            />
+            <Stop
+              offset="58%"
+              stopColor={color}
+              stopOpacity={coreOpacity * 0.08}
+            />
             <Stop offset="100%" stopColor={color} stopOpacity={0} />
           </RadialGradient>
           <RadialGradient id={`${id}-spark`} cx="50%" cy="44%" r="44%">
-            <Stop offset="0%" stopColor="#FFFFFF" stopOpacity={highlightOpacity} />
-            <Stop offset="30%" stopColor={color} stopOpacity={highlightOpacity * 0.18} />
+            <Stop
+              offset="0%"
+              stopColor="#FFFFFF"
+              stopOpacity={highlightOpacity}
+            />
+            <Stop
+              offset="30%"
+              stopColor={color}
+              stopOpacity={highlightOpacity * 0.18}
+            />
             <Stop offset="100%" stopColor={color} stopOpacity={0} />
           </RadialGradient>
         </Defs>
@@ -229,16 +269,16 @@ const GlowOrb = ({
           transform={`rotate(${phase * 18} ${size * 0.5} ${size * 0.52})`}
         />
         <Ellipse
-          cx={size * 0.44 + Math.sin(t * 1.1 + phase) * size * 0.015}
-          cy={size * 0.4 + Math.cos(t * 0.8 + phase) * size * 0.012}
+          cx={size * 0.44 + Math.sin(phaseTime * 1.1 + phase) * size * 0.015}
+          cy={size * 0.4 + Math.cos(phaseTime * 0.8 + phase) * size * 0.012}
           rx={innerRx}
           ry={innerRy}
           fill={`url(#${id}-core)`}
           transform={`rotate(${-16 + phase * 12} ${size * 0.44} ${size * 0.4})`}
         />
         <Ellipse
-          cx={size * 0.61 + Math.cos(t * 0.95 + phase) * size * 0.018}
-          cy={size * 0.35 + Math.sin(t * 1.28 + phase) * size * 0.014}
+          cx={size * 0.61 + Math.cos(phaseTime * 0.95 + phase) * size * 0.018}
+          cy={size * 0.35 + Math.sin(phaseTime * 1.28 + phase) * size * 0.014}
           rx={streakRx}
           ry={streakRy}
           fill={`url(#${id}-spark)`}
@@ -249,7 +289,6 @@ const GlowOrb = ({
   );
 };
 
-// Marquee text - scrolls when text overflows container
 const MarqueeText = ({
   text,
   textStyle,
@@ -262,26 +301,28 @@ const MarqueeText = ({
   const [containerW, setContainerW] = useState(0);
   const [textW, setTextW] = useState(0);
   const tx = useRef(new Animated.Value(0)).current;
-  const GAP = 48;
 
   const shouldScroll =
     textW > 0 && containerW > 0 && (forceScroll || textW > containerW);
 
   useEffect(() => {
     tx.setValue(0);
-    if (!shouldScroll) return;
+    if (!shouldScroll) {
+      return undefined;
+    }
+
     // Scroll the full text+gap width, second copy keeps it looping
     const loop = Animated.loop(
       Animated.timing(tx, {
-        toValue: -(textW + GAP),
-        duration: ((textW + GAP) / 35) * 1000, // 35px/s
+        toValue: -(textW + MARQUEE_GAP),
+        duration: ((textW + MARQUEE_GAP) / 35) * 1000, // 35px/s
         useNativeDriver: true,
         easing: Easing.linear,
       }),
     );
     loop.start();
     return () => loop.stop();
-  }, [shouldScroll, textW]);
+  }, [shouldScroll, textW, tx]);
 
   return (
     <View
@@ -309,7 +350,7 @@ const MarqueeText = ({
         </Text>
         {shouldScroll && (
           <Text
-            style={[textStyle, {width: textW, marginLeft: GAP}]}
+            style={[textStyle, {width: textW, marginLeft: MARQUEE_GAP}]}
             numberOfLines={1}
             ellipsizeMode="clip">
             {text}
@@ -320,10 +361,6 @@ const MarqueeText = ({
   );
 };
 
-// SVG Waveform — each of the 4 waves is driven by its own frequency band.
-// bandsRef.current = [bass, lowMid, highMid, treble], each 0-100.
-// Written by the MusicHapticService frame listener every ~33 ms; read here
-// each frame without triggering a Dashboard re-render.
 const SvgWaveform = ({
   active,
   bandsRef,
@@ -333,24 +370,17 @@ const SvgWaveform = ({
   bandsRef: React.MutableRefObject<[number, number, number, number]>;
   palette: Palette;
 }) => {
-  // Per-wave time accumulators so each band evolves at its own speed
   const timesRef = useRef<[number, number, number, number]>([0, 0, 0, 0]);
   const [, forceUpdate] = useState(0);
   const [w, setW] = useState(0);
   const h = 160;
   const frameIntervalMs = active ? 50 : 100;
 
-  // Time-step per wave: bass is slow/wide, treble is fast/tight
-  const TIME_STEPS: [number, number, number, number] = [
-    0.016, 0.022, 0.03, 0.04,
-  ];
-  const IDLE_STEP = 0.006;
-
   useEffect(() => {
     const interval = setInterval(() => {
-      const t = timesRef.current;
+      const waveTimes = timesRef.current;
       for (let i = 0; i < 4; i++) {
-        t[i] += active ? TIME_STEPS[i] : IDLE_STEP;
+        waveTimes[i] += active ? WAVE_TIME_STEPS[i] : WAVE_IDLE_STEP;
       }
       forceUpdate(n => n + 1);
     }, frameIntervalMs);
@@ -360,12 +390,12 @@ const SvgWaveform = ({
   const colors = [palette.coral, palette.violet, palette.cyan, palette.gold];
 
   const makePath = (i: number): string => {
-    const t = timesRef.current[i];
+    const phaseTime = timesRef.current[i];
     const bandVal = active ? bandsRef.current[i] : 0;
     const maxAmp = h * (0.13 - i * 0.015);
     const amp = active ? maxAmp * Math.max(bandVal / 100, 0.08) : h * 0.025;
     const freq = 0.006 + i * 0.004;
-    const phase = t;
+    const phase = phaseTime;
     const halfH = h / 2;
     const f2 = freq * 2.1;
     const p2 = phase * 0.65;
@@ -383,7 +413,7 @@ const SvgWaveform = ({
         Math.sin(x * freq + phase) * amp +
         Math.sin(x * f2 + p2) * a2 +
         Math.sin(x * f3 + p3) * a3;
-      parts[j] = `${j === 0 ? 'M' : 'L'}${x} ${y | 0}`;
+      parts[j] = `${j === 0 ? 'M' : 'L'}${x} ${Math.round(y)}`;
     }
     return parts.join(' ');
   };
@@ -429,7 +459,6 @@ const SvgWaveform = ({
   );
 };
 
-// Listen Control
 const PILL_W = 260;
 const PILL_H = 52;
 const RIPPLE_DURATION = 1800;
@@ -462,12 +491,14 @@ const ListenControl = ({
       useNativeDriver: false,
       easing: Easing.inOut(Easing.quad),
     }).start();
-  }, [isRecognized]);
+  }, [isRecognized, pillWidth]);
 
   useEffect(() => {
     ring1.setValue(0);
     ring2.setValue(0);
-    if (!isActive || isRecognized) return undefined;
+    if (!isActive || isRecognized) {
+      return undefined;
+    }
 
     // Two staggered expanding rings — ring2 starts halfway through ring1's cycle
     const loop1 = Animated.loop(
@@ -495,7 +526,7 @@ const ListenControl = ({
       loop1.stop();
       loop2.stop();
     };
-  }, [isActive, isRecognized]);
+  }, [isActive, isRecognized, ring1, ring2]);
 
   const ringStyle = (anim: Animated.Value) => ({
     position: 'absolute' as const,
@@ -611,7 +642,6 @@ const ListenControl = ({
   );
 };
 
-// Lyric Line
 const LyricLine = ({
   text,
   isActive,
@@ -640,7 +670,7 @@ const LyricLine = ({
         easing: Easing.inOut(Easing.quad),
       }),
     ]).start();
-  }, [isActive, isPast]);
+  }, [opacity, targetOpacity]);
 
   return (
     <View
@@ -667,7 +697,6 @@ const LyricLine = ({
   );
 };
 
-// Custom Slider
 const CustomSlider = ({
   value,
   min,
@@ -685,7 +714,6 @@ const CustomSlider = ({
   color: string;
   palette: Palette;
 }) => {
-  // Use refs for everything so panResponder is created once and never goes stale
   const trackRef = useRef<View>(null);
   const trackPageXRef = useRef(0);
   const trackWidthRef = useRef(1);
@@ -807,7 +835,6 @@ const CustomSlider = ({
   );
 };
 
-// Nav Item
 const NavItem = ({
   IconComponent,
   label,
@@ -859,7 +886,6 @@ const NavItem = ({
   </TouchableOpacity>
 );
 
-// Glass Card
 const GlassCard = ({
   children,
   style,
@@ -902,22 +928,27 @@ const GlassCard = ({
   );
 };
 
-// Main Dashboard
 export const Dashboard = () => {
-  // Persistent settings from Zustand store
   const {
-    theme, setTheme,
-    appLanguage, setAppLanguage,
-    defaultLyricLang, setDefaultLyricLang,
-    fontSize, setFontSize,
-    intensity, setIntensity,
-    bassBoost, setBassBoost,
-    trebleBoost, setTrebleBoost,
-    activePreset, applyPreset,
+    theme,
+    setTheme,
+    appLanguage,
+    setAppLanguage,
+    defaultLyricLang,
+    setDefaultLyricLang,
+    fontSize,
+    setFontSize,
+    intensity,
+    setIntensity,
+    bassBoost,
+    setBassBoost,
+    trebleBoost,
+    setTrebleBoost,
+    activePreset,
+    applyPreset,
   } = useSettingsStore();
   const i18n = t(appLanguage);
 
-  // Non-persistent local UI state
   const [tab, setTab] = useState<Tab>('listen');
   const [isListening, setIsListening] = useState(false);
   const [recognized, setRecognized] = useState(false);
@@ -928,12 +959,10 @@ export const Dashboard = () => {
     AppIcon.getIcon().then(name => setActiveIcon(name));
   }, []);
 
-  // Song data from recognition
   const [songTitle, setSongTitle] = useState('');
   const [songArtist, setSongArtist] = useState('');
   const [artworkURL, setArtworkURL] = useState('');
 
-  // Lyrics pipeline state
   type LyricsStatus = 'idle' | 'loading' | 'synced' | 'plain' | 'unavailable';
   const [syncedLyrics, setSyncedLyrics] = useState<LRCLine[]>([]);
   const [plainLyrics, setPlainLyrics] = useState<string[] | null>(null);
@@ -943,18 +972,13 @@ export const Dashboard = () => {
   const [recognitionError, setRecognitionError] = useState<string | null>(null);
 
   const breathe = useRef(new Animated.Value(1)).current;
-  // Live mic band energies (0–100 each: bass, lowMid, highMid, treble).
-  // Written by MusicHapticService frame listener; read by SvgWaveform each
-  // frame — avoids re-rendering Dashboard on every audio tick.
   const micBandsRef = useRef<[number, number, number, number]>([
-    30, 22, 18, 12,
+    ...DEFAULT_MIC_BANDS,
   ]);
 
-  // Shazam diagnostics shown while listening.
   const [sigCount, setSigCount] = useState(0);
   const [shazamError, setShazamError] = useState('');
 
-  // Mutable state shared across async callbacks.
   const isListeningRef = useRef(false);
   const recognizedRef = useRef(false);
   const sessionIdRef = useRef(0);
@@ -969,8 +993,17 @@ export const Dashboard = () => {
   const recognitionMatchOffsetRef = useRef(0);
   const recognitionMatchSystemTimeRef = useRef(0);
   const recognitionTrackIdRef = useRef('');
+  const activateMatchedSongRef = useRef<(result: RecognitionResult) => void>(
+    () => {},
+  );
+  const considerSameSongAnchorRef = useRef<(result: RecognitionResult) => void>(
+    () => {},
+  );
 
   const palette = getPalette(theme);
+  const resetMicBands = () => {
+    micBandsRef.current = [...DEFAULT_MIC_BANDS];
+  };
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -993,9 +1026,10 @@ export const Dashboard = () => {
     return () => loop.stop();
   }, [breathe]);
 
-  // Use live mic energy while Shazam is listening.
   useEffect(() => {
-    if (!isListening) return undefined;
+    if (!isListening) {
+      return undefined;
+    }
 
     setSigCount(0);
     setShazamError('');
@@ -1023,12 +1057,10 @@ export const Dashboard = () => {
 
     return () => {
       unsubscribe();
-      micBandsRef.current = [30, 22, 18, 12];
+      resetMicBands();
     };
   }, [isListening]);
 
-  // Haptic sliders are persistent settings and should drive the native engine
-  // immediately, not just update the UI.
   useEffect(() => {
     MusicHapticService.setConfig({
       intensity,
@@ -1037,21 +1069,23 @@ export const Dashboard = () => {
     });
   }, [intensity, bassBoost, trebleBoost]);
 
-  // Keep the native music-haptic engine alive while a track is active.
   useEffect(() => {
-    if (!recognized) return undefined;
-    void MusicHapticService.start();
+    if (!recognized) {
+      return undefined;
+    }
+
+    MusicHapticService.start();
     return () => {
-      void MusicHapticService.stop();
-      micBandsRef.current = [30, 22, 18, 12];
+      MusicHapticService.stop();
+      resetMicBands();
     };
   }, [recognized]);
 
-  // Only mirror native band data into JS while the waveform is on screen.
-  // Native haptics keep running either way; this just avoids bridge + JS churn
-  // when the user is on another tab.
   useEffect(() => {
-    if (!recognized || tab !== 'listen') return undefined;
+    if (!recognized || tab !== 'listen') {
+      return undefined;
+    }
+
     const sub = MusicHapticService.addFrameListener(frame => {
       const b = frame.bands;
       const r = micBandsRef.current;
@@ -1062,11 +1096,10 @@ export const Dashboard = () => {
     });
     return () => {
       sub.remove();
-      micBandsRef.current = [30, 22, 18, 12];
+      resetMicBands();
     };
   }, [recognized, tab]);
 
-  // Playback clock follows the latest Shazam anchor.
   useEffect(() => {
     if (!recognized) {
       setPlaybackPosition(0);
@@ -1084,14 +1117,17 @@ export const Dashboard = () => {
     return () => clearInterval(interval);
   }, [recognized, tab]);
 
-  // Keep the active lyric line in view.
   useEffect(() => {
-    if (currentLyricIndex < 0 || !lyricScrollRef.current) return;
+    if (currentLyricIndex < 0 || !lyricScrollRef.current) {
+      return;
+    }
+
     if (
       lyricsStatus !== 'synced' &&
       !(lyricsStatus === 'plain' && plainSyncedLyrics.length > 0)
-    )
+    ) {
       return;
+    }
     const measuredOffset = lyricLineOffsetsRef.current[currentLyricIndex];
     const fallbackOffset = currentLyricIndex * getLyricRowHeight(fontSize);
     const target = Math.max(
@@ -1101,13 +1137,14 @@ export const Dashboard = () => {
     lyricScrollRef.current.scrollTo({y: target, animated: true});
   }, [currentLyricIndex, fontSize, lyricsStatus, plainSyncedLyrics.length]);
 
-  // Cleanup on unmount
   useEffect(() => {
+    const syncEngine = syncEngineRef.current;
+
     return () => {
-      syncEngineRef.current.stop();
+      syncEngine.stop();
       abortControllerRef.current?.abort();
       MusicRecognitionService.stop();
-      void MusicHapticService.stop();
+      MusicHapticService.stop();
     };
   }, []);
 
@@ -1206,9 +1243,7 @@ export const Dashboard = () => {
         console.log(
           `[Resonate] shazam anchor candidate offset=${result.matchOffset.toFixed(
             2,
-          )}s expected=${expectedPosition.toFixed(
-            2,
-          )}s backward=${isBackward}`,
+          )}s expected=${expectedPosition.toFixed(2)}s backward=${isBackward}`,
         );
       }
       return;
@@ -1217,7 +1252,7 @@ export const Dashboard = () => {
     const agrees =
       pending.isBackward === isBackward &&
       Math.abs(result.matchOffset - pending.latest.matchOffset) <=
-      SAME_SONG_ANCHOR_AGREEMENT_SEC;
+        SAME_SONG_ANCHOR_AGREEMENT_SEC;
 
     if (!agrees) {
       pendingAnchorUpdateRef.current = {
@@ -1263,6 +1298,8 @@ export const Dashboard = () => {
     syncToShazamAnchor(nextPending.latest);
   };
 
+  considerSameSongAnchorRef.current = considerSameSongAnchor;
+
   const activateMatchedSong = (result: RecognitionResult) => {
     currentSongKeyRef.current = buildSongKey(result);
     pendingSongSwitchRef.current = null;
@@ -1274,13 +1311,15 @@ export const Dashboard = () => {
     syncToShazamAnchor(result);
     resetLyricState();
     setLyricsStatus('loading');
-    void fetchLyricsForSong(result);
+    fetchLyricsForSong(result);
   };
+
+  activateMatchedSongRef.current = activateMatchedSong;
 
   const resetRecognitionSession = () => {
     abortControllerRef.current?.abort();
     MusicRecognitionService.stop();
-    void MusicHapticService.stop();
+    MusicHapticService.stop();
     HapticEngine.reset();
     syncEngineRef.current.stop();
 
@@ -1308,14 +1347,16 @@ export const Dashboard = () => {
 
   useEffect(() => {
     const unsubscribe = MusicRecognitionService.subscribeToMatches(result => {
-      if (!recognizedRef.current) return;
+      if (!recognizedRef.current) {
+        return;
+      }
 
       const now = performance.now();
       clearStalePendingSongSwitch(now);
 
       const nextSongKey = buildSongKey(result);
       if (nextSongKey === currentSongKeyRef.current) {
-        considerSameSongAnchor(result);
+        considerSameSongAnchorRef.current(result);
         return;
       }
 
@@ -1346,13 +1387,12 @@ export const Dashboard = () => {
         return;
       }
 
-      activateMatchedSong(updatedPending.latest);
+      activateMatchedSongRef.current(updatedPending.latest);
     });
 
     return unsubscribe;
   }, []);
 
-  // Fetch lyrics from LRCLIB after recognition
   async function fetchLyricsForSong(result: RecognitionResult) {
     abortControllerRef.current?.abort();
     const controller = new AbortController();
@@ -1365,7 +1405,9 @@ export const Dashboard = () => {
         result.artist,
         controller.signal,
       );
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        return;
+      }
 
       recognitionTrackIdRef.current = data.trackId;
 
@@ -1398,19 +1440,26 @@ export const Dashboard = () => {
         setLyricsStatus('unavailable');
       }
     } catch (err: any) {
-      if (err.name === 'AbortError') return;
+      if (err.name === 'AbortError') {
+        return;
+      }
+
       syncEngineRef.current.stop();
       setLyricsStatus('unavailable');
     }
   }
 
   const handleListen = async () => {
-    if (transitioningRef.current) return;
+    if (transitioningRef.current) {
+      return;
+    }
 
     if (recognizedRef.current) {
       transitioningRef.current = true;
       resetRecognitionSession();
-      setTimeout(() => { transitioningRef.current = false; }, 300);
+      setTimeout(() => {
+        transitioningRef.current = false;
+      }, 300);
       return;
     }
 
@@ -1419,7 +1468,9 @@ export const Dashboard = () => {
       MusicRecognitionService.stop();
       isListeningRef.current = false;
       setIsListening(false);
-      setTimeout(() => { transitioningRef.current = false; }, 300);
+      setTimeout(() => {
+        transitioningRef.current = false;
+      }, 300);
       return;
     }
 
@@ -1432,7 +1483,9 @@ export const Dashboard = () => {
 
     try {
       const result = await MusicRecognitionService.identify();
-      if (sessionIdRef.current !== mySession) return;
+      if (sessionIdRef.current !== mySession) {
+        return;
+      }
 
       pendingSongSwitchRef.current = null;
       recognizedRef.current = true;
@@ -1440,19 +1493,19 @@ export const Dashboard = () => {
       setRecognized(true);
       setIsListening(false);
 
-      // Music-haptic engine takes over from ShazamKit — same shared audio
-      // capture, no teardown/restart gap.
       HapticEngine.triggerSuccess();
 
       activateMatchedSong(result);
     } catch (err: any) {
-      if (sessionIdRef.current !== mySession) return;
+      if (sessionIdRef.current !== mySession) {
+        return;
+      }
+
       isListeningRef.current = false;
       setIsListening(false);
 
       const code = err.code || err.message || '';
       if (code === 'CANCELLED') {
-        // User cancelled, nothing to show
       } else if (code === 'TIMEOUT') {
         setRecognitionError(i18n.noSongRecognized);
       } else if (code !== 'BUSY') {
@@ -1681,8 +1734,12 @@ export const Dashboard = () => {
                     isRecognized={false}
                     palette={palette}
                     onPress={handleListen}
-                    labelText={isListening ? i18n.listening : i18n.startListening}
-                    subText={isListening ? i18n.identifyingAudio : i18n.tapToRecognize}
+                    labelText={
+                      isListening ? i18n.listening : i18n.startListening
+                    }
+                    subText={
+                      isListening ? i18n.identifyingAudio : i18n.tapToRecognize
+                    }
                   />
                   {isListening && sigCount > 0 && !shazamError && (
                     <Text
@@ -2354,17 +2411,17 @@ export const Dashboard = () => {
                   ].map((opt, idx) => {
                     const selected = activeIcon === opt.key;
                     return (
-	                      <TouchableOpacity
-	                        key={opt.key}
-	                        onPress={() => {
+                      <TouchableOpacity
+                        key={opt.key}
+                        onPress={() => {
                           if (activeIcon === opt.key) {
                             return;
                           }
 
-	                          AppIcon.setIcon(opt.key)
-	                            .then(() => setActiveIcon(opt.key))
-	                            .catch(() => {});
-	                        }}
+                          AppIcon.setIcon(opt.key)
+                            .then(() => setActiveIcon(opt.key))
+                            .catch(() => {});
+                        }}
                         style={{
                           flex: 1,
                           marginRight: idx === 0 ? 8 : 0,

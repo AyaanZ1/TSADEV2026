@@ -1,6 +1,37 @@
 const {NativeModules} = require('react-native');
 
 jest.mock('react-native-linear-gradient', () => 'LinearGradient');
+jest.mock('@react-native-async-storage/async-storage', () => {
+  const store = new Map();
+
+  return {
+    setItem: jest.fn((key, value) => {
+      store.set(key, value);
+      return Promise.resolve(null);
+    }),
+    getItem: jest.fn(key => Promise.resolve(store.get(key) ?? null)),
+    removeItem: jest.fn(key => {
+      store.delete(key);
+      return Promise.resolve(null);
+    }),
+    clear: jest.fn(() => {
+      store.clear();
+      return Promise.resolve(null);
+    }),
+    getAllKeys: jest.fn(() => Promise.resolve(Array.from(store.keys()))),
+    multiGet: jest.fn(keys =>
+      Promise.resolve(keys.map(key => [key, store.get(key) ?? null])),
+    ),
+    multiSet: jest.fn(entries => {
+      entries.forEach(([key, value]) => store.set(key, value));
+      return Promise.resolve(null);
+    }),
+    multiRemove: jest.fn(keys => {
+      keys.forEach(key => store.delete(key));
+      return Promise.resolve(null);
+    }),
+  };
+});
 
 jest.mock('@react-native-community/blur', () => {
   const {View} = require('react-native');

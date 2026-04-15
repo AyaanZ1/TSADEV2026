@@ -1,5 +1,5 @@
-import { NativeModules } from 'react-native';
+import {NativeModules} from 'react-native';
 
-const { ShazamKitRecognition } = NativeModules;
+const {ShazamKitRecognition} = NativeModules;
 
 export default ShazamKitRecognition;

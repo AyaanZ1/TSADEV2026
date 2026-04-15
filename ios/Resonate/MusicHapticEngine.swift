@@ -3,18 +3,9 @@ import AVFoundation
 import Accelerate
 import CoreHaptics
 
-// Real-time music-to-haptic engine for deaf/hard-of-hearing users.
-//
-// Pipeline per audio buffer:
-//   1. Accumulate samples into a Hann-windowed ring, 2048 FFT with 50% overlap
-//   2. vDSP FFT -> magnitude spectrum
-//   3. Collapse into perceptual bands; multiply by voice-suppression weights
-//      (downweight 250 Hz–4 kHz where vocals live; boost bass + brilliance)
-//   4. AGC per band (asymmetric envelope) so quiet songs still feel strong
-//   5. Spectral-flux onset detection on bass+brilliance bins for beats
-//   6. Drive CHHapticEngine: continuous player modulated by bass (intensity)
-//      + brilliance (sharpness); transient events on detected beats
-//   7. Emit throttled 4-band summary to JS for the waveform visualizer
+// Music-driven haptics for the live listening view.
+// The engine keeps one FFT pipeline alive, shapes it into a few usable bands,
+// and sends a light summary back to JS for the waveform.
 @objc(MusicHapticEngine)
 class MusicHapticEngine: RCTEventEmitter {
 

@@ -12,13 +12,9 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-// Mirror of iOS AudioTapCoordinator: one AudioRecord, shared across ShazamKit
-// recognition and MusicHapticProcessor so transitioning between them doesn't
-// tear down and restart a recorder (~100–300 ms gap the user can feel).
-//
-// Subscribers receive raw PCM buffers (16-bit little-endian mono) as they
-// arrive from the hardware. Engine stays alive while at least one subscriber
-// is registered.
+// Shared recorder for Shazam matching and music haptics.
+// Keeping one AudioRecord alive avoids the short gap you'd get from tearing
+// the mic down and starting it again between modes.
 object AudioCaptureCoordinator {
 
     const val SAMPLE_RATE = 44_100

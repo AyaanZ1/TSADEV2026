@@ -78,10 +78,13 @@ export const LRCLIBService = {
       artist_name: artist,
     });
 
-    const response = await fetch(`https://lrclib.net/api/get?${params.toString()}`, {
-      signal,
-      headers: {'User-Agent': 'Resonate/1.0'},
-    });
+    const response = await fetch(
+      `https://lrclib.net/api/get?${params.toString()}`,
+      {
+        signal,
+        headers: {'User-Agent': 'Resonate/1.0'},
+      },
+    );
 
     if (!response.ok) {
       throw new Error(`LRCLIB returned ${response.status}`);
@@ -89,7 +92,12 @@ export const LRCLIBService = {
 
     const data = await response.json();
     if (
-      !metadataMatches(title, artist, data.trackName || '', data.artistName || '')
+      !metadataMatches(
+        title,
+        artist,
+        data.trackName || '',
+        data.artistName || '',
+      )
     ) {
       throw new Error('MISMATCH');
     }

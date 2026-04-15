@@ -9,12 +9,8 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-// Real-time music -> vibration for deaf/hard-of-hearing users.
-//
-// Same DSP design as iOS: 2048-sample Hann-windowed FFT with 50% overlap,
-// per-band AGC, voice-suppression band weights, spectral-flux onset detection.
-// Output: Android Vibrator driven at ~30 Hz with amplitude tracking bass
-// drive, plus transient pulses on detected beats.
+// Android side of the live music-to-haptics pipeline.
+// It mirrors the iOS band model closely so both platforms feel the same.
 class MusicHapticProcessor(
     private val context: Context,
     private val onFrame: (bands: FloatArray, amplitude: Float, intensity: Float, sharpness: Float) -> Unit,
@@ -29,7 +25,7 @@ class MusicHapticProcessor(
         private const val MIN_BEAT_INTERVAL_MS = 120L
         private const val SAMPLE_RATE = AudioCaptureCoordinator.SAMPLE_RATE
 
-        // Hz band edges. 8 bands -> collapsed to 4 for JS.
+        // Hz band edges. Eight internal bands collapse to four UI bands.
         private val BAND_EDGES = floatArrayOf(
             20f, 60f, 150f, 400f, 1000f, 2500f, 5000f, 10000f, 16000f
         )

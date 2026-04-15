@@ -133,7 +133,9 @@ export class LyricSyncEngine {
   }
 
   private tick() {
-    if (!this.callback || this.lyrics.length === 0) return;
+    if (!this.callback || this.lyrics.length === 0) {
+      return;
+    }
 
     const pos = this.getCurrentPosition();
     let idx = this.activeIndex;

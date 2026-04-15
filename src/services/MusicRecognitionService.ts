@@ -27,7 +27,9 @@ type NativeRecognitionResult = {
 
 const shazamModule =
   Platform.OS === 'ios' ? NativeModules.ShazamKitRecognition : null;
-const shazamEmitter = shazamModule ? new NativeEventEmitter(shazamModule) : null;
+const shazamEmitter = shazamModule
+  ? new NativeEventEmitter(shazamModule)
+  : null;
 const noop = () => {};
 
 const mapRecognitionResult = (
@@ -41,10 +43,7 @@ const mapRecognitionResult = (
   matchSystemTime: performance.now(),
 });
 
-const subscribe = <T>(
-  eventName: string,
-  listener: (payload: T) => void,
-) => {
+const subscribe = <T>(eventName: string, listener: (payload: T) => void) => {
   if (!shazamEmitter) {
     return noop;
   }
@@ -62,12 +61,9 @@ export const MusicRecognitionService = {
   },
 
   subscribeToMatches: (callback: (result: RecognitionResult) => void) => {
-    return subscribe<NativeRecognitionResult>(
-      'shazamMatch',
-      data => {
-        callback(mapRecognitionResult(data));
-      },
-    );
+    return subscribe<NativeRecognitionResult>('shazamMatch', data => {
+      callback(mapRecognitionResult(data));
+    });
   },
 
   subscribeToDiagnostics: (

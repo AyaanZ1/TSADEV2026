@@ -181,8 +181,8 @@ extension ShazamKitRecognition: SHSessionDelegate {
             switch err.code {
             case 100: return "Invalid audio format"
             case 101: return "Audio interruption"
-            case 200, 201: return "Keep the mic steady — audio too short to match"
-            case 202: return "Can't reach Shazam servers — check your internet connection"
+            case 200, 201: return "Keep the mic steady. Audio is too short to match."
+            case 202: return "Can't reach Shazam servers. Check your internet connection."
             case 203, 204: return "Shazam catalog error"
             default: return "Shazam error \(err.code)"
             }

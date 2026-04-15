@@ -161,7 +161,7 @@ const fr: TranslationStrings = {
   haptic: 'Haptique',
   settings: 'Réglages',
   listening: 'Écoute en cours',
-  startListening: 'Commencer l\'écoute',
+  startListening: "Commencer l'écoute",
   identifyingAudio: 'Identification audio...',
   tapToRecognize: 'Appuyez pour reconnaître',
   signatureChecked: 'signature vérifiée',
@@ -191,9 +191,9 @@ const fr: TranslationStrings = {
   light: 'Clair',
   dark: 'Sombre',
   amoled: 'AMOLED',
-  appIcon: 'ICÔNE DE L\'APP',
-  iconConfirmHint: 'iOS affichera une confirmation lors du changement d\'icône.',
-  appLanguageLabel: 'LANGUE DE L\'APP',
+  appIcon: "ICÔNE DE L'APP",
+  iconConfirmHint: "iOS affichera une confirmation lors du changement d'icône.",
+  appLanguageLabel: "LANGUE DE L'APP",
   lyricSize: 'TAILLE DES PAROLES',
   defaultLyricLanguage: 'LANGUE DES PAROLES',
   wearableSupport: 'Support Wearable',
@@ -350,8 +350,8 @@ const translations: Record<AppLanguage, TranslationStrings> = {
   Español: es,
   Français: fr,
   Deutsch: de,
-  '日本語': ja,
-  '한국어': ko,
+  日本語: ja,
+  한국어: ko,
 };
 
 export const t = (lang: AppLanguage): TranslationStrings =>

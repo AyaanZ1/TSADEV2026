@@ -8,6 +8,8 @@ const AUDIO_SAMPLE_RATE = 44100;
 const AUDIO_CHANNELS = 1;
 const AUDIO_BITS_PER_SAMPLE = 16;
 const AUDIO_BUFFER_SIZE = 4096;
+const BASS_BLOCK_SIZE = 64;
+const LOW_MID_BLOCK_SIZE = 16;
 
 let captureGeneration = 0;
 
@@ -32,6 +34,88 @@ type AudioData = {
 
 type Listener = (data: AudioData) => void;
 
+const analyzeFrame = (buffer: Buffer): AudioData => {
+  const frameCount = buffer.length / 2;
+  if (frameCount === 0) {
+    return {
+      amplitude: 0,
+      frequency: 0,
+      bands: [0, 0, 0, 0],
+    };
+  }
+
+  let sumSquares = 0;
+  let zeroCrossings = 0;
+  let diffSumSq = 0;
+  let previousValue = 0;
+
+  let bassBlockSum = 0;
+  let bassBlockFill = 0;
+  let bassBlockSumSq = 0;
+  let bassBlockCount = 0;
+
+  let lowMidBlockSum = 0;
+  let lowMidBlockFill = 0;
+  let lowMidBlockSumSq = 0;
+  let lowMidBlockCount = 0;
+
+  for (let sampleIndex = 0; sampleIndex < frameCount; sampleIndex += 1) {
+    const value = buffer.readInt16LE(sampleIndex * 2);
+    sumSquares += value * value;
+
+    if (
+      sampleIndex > 0 &&
+      ((previousValue > 0 && value <= 0) || (previousValue <= 0 && value > 0))
+    ) {
+      zeroCrossings += 1;
+    }
+
+    const diff = value - previousValue;
+    diffSumSq += diff * diff;
+    previousValue = value;
+
+    bassBlockSum += value;
+    bassBlockFill += 1;
+    if (bassBlockFill === BASS_BLOCK_SIZE) {
+      const bassMean = bassBlockSum / BASS_BLOCK_SIZE;
+      bassBlockSumSq += bassMean * bassMean;
+      bassBlockCount += 1;
+      bassBlockSum = 0;
+      bassBlockFill = 0;
+    }
+
+    lowMidBlockSum += value;
+    lowMidBlockFill += 1;
+    if (lowMidBlockFill === LOW_MID_BLOCK_SIZE) {
+      const lowMidMean = lowMidBlockSum / LOW_MID_BLOCK_SIZE;
+      lowMidBlockSumSq += lowMidMean * lowMidMean;
+      lowMidBlockCount += 1;
+      lowMidBlockSum = 0;
+      lowMidBlockFill = 0;
+    }
+  }
+
+  const rms = Math.sqrt(sumSquares / frameCount);
+  const amplitude = Math.min(rms / 10000, 1);
+  const frequency = (zeroCrossings * AUDIO_SAMPLE_RATE) / (2 * frameCount);
+  const bass =
+    bassBlockCount > 0
+      ? Math.min(Math.sqrt(bassBlockSumSq / bassBlockCount) / 5500, 1)
+      : 0;
+  const lowMid =
+    lowMidBlockCount > 0
+      ? Math.min(Math.sqrt(lowMidBlockSumSq / lowMidBlockCount) / 7000, 1)
+      : 0;
+  const highMid = amplitude;
+  const treble = Math.min(Math.sqrt(diffSumSq / frameCount) / 18000, 1);
+
+  return {
+    amplitude,
+    frequency,
+    bands: [bass, lowMid, highMid, treble],
+  };
+};
+
 export const AudioService = {
   start: () => {
     const generation = ++captureGeneration;
@@ -44,18 +128,25 @@ export const AudioService = {
       bufferSize: AUDIO_BUFFER_SIZE,
     });
 
-    void (async () => {
+    (async () => {
       await configureSpeechCapture();
-      if (generation !== captureGeneration) return;
+      if (generation !== captureGeneration) {
+        return;
+      }
 
       RNLiveAudioStream?.start();
 
       await configureSpeechCapture();
-      if (generation !== captureGeneration) return;
+      if (generation !== captureGeneration) {
+        return;
+      }
 
       setTimeout(() => {
-        if (generation !== captureGeneration) return;
-        void configureSpeechCapture();
+        if (generation !== captureGeneration) {
+          return;
+        }
+
+        configureSpeechCapture();
       }, 150);
     })();
   },
@@ -63,7 +154,7 @@ export const AudioService = {
   stop: () => {
     captureGeneration += 1;
     RNLiveAudioStream?.stop();
-    void AudioSessionTunerModule.deactivate().catch(error => {
+    AudioSessionTunerModule.deactivate().catch(error => {
       if (__DEV__) {
         console.warn(
           '[AudioService] Failed to deactivate audio session',
@@ -76,75 +167,7 @@ export const AudioService = {
   addListener: (callback: Listener) => {
     return eventEmitter.addListener('data', (base64Data: string) => {
       const buffer = Buffer.from(base64Data, 'base64');
-      const pcmData = new Int16Array(buffer.length / 2);
-
-      let sumSquares = 0;
-      let zeroCrossings = 0;
-      let diffSumSq = 0; // sum of squared first-differences (treble proxy)
-      let previousValue = 0;
-
-      for (let i = 0; i < buffer.length; i += 2) {
-        const val = buffer.readInt16LE(i);
-        pcmData[i / 2] = val;
-
-        sumSquares += val * val;
-
-        if (
-          i > 0 &&
-          ((previousValue > 0 && val <= 0) || (previousValue <= 0 && val > 0))
-        ) {
-          zeroCrossings++;
-        }
-
-        const diff = val - previousValue;
-        diffSumSq += diff * diff;
-        previousValue = val;
-      }
-
-      const N = pcmData.length;
-      const rms = Math.sqrt(sumSquares / N);
-      const amplitude = Math.min(rms / 10000, 1);
-      const frequency = (zeroCrossings * AUDIO_SAMPLE_RATE) / (2 * N);
-
-      // Approximate four broad bands for the waveform and haptics.
-      const BASS_BLOCK = 64;
-      let bassBlockSumSq = 0;
-      let bassBlockCount = 0;
-      for (let i = 0; i + BASS_BLOCK <= N; i += BASS_BLOCK) {
-        let mean = 0;
-        for (let j = i; j < i + BASS_BLOCK; j++) mean += pcmData[j];
-        mean /= BASS_BLOCK;
-        bassBlockSumSq += mean * mean;
-        bassBlockCount++;
-      }
-      const bass =
-        bassBlockCount > 0
-          ? Math.min(Math.sqrt(bassBlockSumSq / bassBlockCount) / 5500, 1)
-          : 0;
-
-      const MID_BLOCK = 16;
-      let midBlockSumSq = 0;
-      let midBlockCount = 0;
-      for (let i = 0; i + MID_BLOCK <= N; i += MID_BLOCK) {
-        let mean = 0;
-        for (let j = i; j < i + MID_BLOCK; j++) mean += pcmData[j];
-        mean /= MID_BLOCK;
-        midBlockSumSq += mean * mean;
-        midBlockCount++;
-      }
-      const lowMid =
-        midBlockCount > 0
-          ? Math.min(Math.sqrt(midBlockSumSq / midBlockCount) / 7000, 1)
-          : 0;
-
-      const highMid = Math.min(rms / 10000, 1);
-      const treble = Math.min(Math.sqrt(diffSumSq / N) / 18000, 1);
-
-      callback({
-        amplitude,
-        frequency,
-        bands: [bass, lowMid, highMid, treble],
-      });
+      callback(analyzeFrame(buffer));
     });
   },
 };
