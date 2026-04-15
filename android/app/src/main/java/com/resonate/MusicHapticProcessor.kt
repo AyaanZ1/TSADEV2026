@@ -21,7 +21,6 @@ class MusicHapticProcessor(
         private const val FFT_SIZE = 2048
         private const val HOP_SIZE = 1024
         private const val EMIT_INTERVAL_MS = 33L
-        private const val VIBRATION_UPDATE_INTERVAL_MS = 33L
         private const val MIN_BEAT_INTERVAL_MS = 120L
         private const val SAMPLE_RATE = AudioCaptureCoordinator.SAMPLE_RATE
 
@@ -53,7 +52,6 @@ class MusicHapticProcessor(
 
         // ~250-frame window (~12s) for input loudness norm.
         private const val LOUDNESS_TRACK_ALPHA = 0.004f
-        private const val CONTINUITY_FLOOR = 0.22f
     }
 
     @Volatile private var running = false
@@ -85,8 +83,6 @@ class MusicHapticProcessor(
     private var nextTempoBeatMs = 0L
 
     private var lastEmitMs = 0L
-    private var lastVibrationMs = 0L
-    private var lastContinuousIntensity = -1f
     private var avgInputAmplitude = 0.005f
     private var smoothedIntensity = 0f
     @Volatile private var intensitySetting = DEFAULT_INTENSITY_SETTING
@@ -103,7 +99,7 @@ class MusicHapticProcessor(
             context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
     }
-    private val hasAmplitudeControl = vibrator?.hasAmplitudeControl ?: false
+    private val hasAmplitudeControl = vibrator?.hasAmplitudeControl() ?: false
 
     fun start() {
         if (running) return
@@ -136,8 +132,6 @@ class MusicHapticProcessor(
         lastBeatMs = 0L
         lastPulseMs = 0L
         lastEmitMs = 0L
-        lastVibrationMs = 0L
-        lastContinuousIntensity = -1f
         avgInputAmplitude = 0.005f
         smoothedIntensity = 0f
         java.util.Arrays.fill(tempoIntervals, 0f)
@@ -165,7 +159,7 @@ class MusicHapticProcessor(
             i++
         }
 
-        while (sampleLen >= FFT_SIZE) {
+        while (sampleLen >= FFT_SIZE && running) {
             processWindow()
             // Slide by HOP_SIZE
             System.arraycopy(sampleBuf, HOP_SIZE, sampleBuf, 0, sampleLen - HOP_SIZE)
@@ -239,12 +233,12 @@ class MusicHapticProcessor(
         val brillianceDrive = ((normalizedBands[5] * 0.6f + normalizedBands[6] * 1.0f + normalizedBands[7] * 0.7f) / 2.3f) * trebleGain
 
         // Continuous baseline buzz. Scales with how loud "now" is vs the running norm.
-        val baseline = min(max(loudnessRatio * 0.38f, CONTINUITY_FLOOR * 0.7f), 0.75f)
+        val baseline = min(max((loudnessRatio - 0.92f) * 0.55f, 0f), 0.32f)
         // Bass + treble spike on top of the baseline.
-        val dynamic = bassDrive * 0.55f + brillianceDrive * 0.42f
+        val dynamic = bassDrive * 0.6f + brillianceDrive * 0.28f
         val rawIntensity = min(max((baseline + dynamic) * intensityGain, 0f), 1f)
         // Smooth so we don't jitter between frames.
-        smoothedIntensity = smoothedIntensity * 0.55f + rawIntensity * 0.45f
+        smoothedIntensity = smoothedIntensity * 0.72f + rawIntensity * 0.28f
         val intensity = smoothedIntensity
         val sharpness = min(max(brillianceDrive * 0.8f + 0.25f, 0f), 1f)
 
@@ -269,48 +263,10 @@ class MusicHapticProcessor(
             maybeFireTempoPulse(now, bassDrive, intensityGain, bassGain, trebleGain)
         }
 
-        updateContinuousVibration(intensity, now)
-
         if (now - lastEmitMs >= EMIT_INTERVAL_MS) {
             lastEmitMs = now
             emitFrame(normalizedBands, intensity, sharpness)
         }
-    }
-
-    // Ongoing hum: a quick low-amplitude oneshot re-issued every frame tracks
-    // the bass envelope. The Android motor can't do intensity modulation on a
-    // running effect, but back-to-back oneshots produce a continuous feel.
-    private fun updateContinuousVibration(intensity: Float, now: Long) {
-        val v = vibrator ?: return
-        if (!v.hasVibrator()) return
-
-        // Drop obviously-dead frames (post-stop, silence). The baseline keeps
-        // active audio above ~0.15 so this doesn't fight continuity.
-        if (intensity < 0.05f) return
-
-        val amp = if (hasAmplitudeControl) {
-            (intensity * 255f).toInt().coerceIn(1, 255)
-        } else {
-            // No amplitude control, so gate by duty cycle instead (skip weaker frames).
-            if (intensity < 0.3f) return
-            VibrationEffect.DEFAULT_AMPLITUDE
-        }
-
-        val intensityDelta = kotlin.math.abs(intensity - lastContinuousIntensity)
-        if (
-            lastVibrationMs > 0 &&
-            now - lastVibrationMs < VIBRATION_UPDATE_INTERVAL_MS &&
-            intensityDelta < 0.08f
-        ) {
-            return
-        }
-
-        try {
-            val effect = VibrationEffect.createOneShot(40L, amp)
-            v.vibrate(effect)
-            lastVibrationMs = now
-            lastContinuousIntensity = intensity
-        } catch (_: Throwable) {}
     }
 
     private fun fireBeat(
@@ -320,6 +276,7 @@ class MusicHapticProcessor(
         trebleGain: Float,
         beatTimeMs: Long
     ) {
+        if (!running) return
         val v = vibrator ?: return
         if (!v.hasVibrator()) return
 

@@ -1,6 +1,7 @@
 import {SHAZAM_DEVELOPER_TOKEN} from '@env';
 import {NativeEventEmitter, NativeModules, Platform} from 'react-native';
 import ShazamKitRecognition from '../NativeModules/ShazamKitRecognitionModule';
+import {ensureMicrophonePermission} from './AudioPermissionService';
 
 export type RecognitionResult = {
   title: string;
@@ -25,12 +26,14 @@ type NativeRecognitionResult = {
   matchOffset: number;
 };
 
-const shazamModule =
-  Platform.OS === 'ios' ? NativeModules.ShazamKitRecognition : null;
+const shazamModule = NativeModules.ShazamKitRecognition ?? null;
 const shazamEmitter = shazamModule
   ? new NativeEventEmitter(shazamModule)
   : null;
 const noop = () => {};
+
+const normalizeMatchOffset = (offset: number) =>
+  Platform.OS === 'android' ? offset / 1000 : offset;
 
 const mapRecognitionResult = (
   result: NativeRecognitionResult,
@@ -39,7 +42,7 @@ const mapRecognitionResult = (
   artist: result.artist,
   artworkURL: result.artworkURL || '',
   genres: result.genres || [],
-  matchOffset: result.matchOffset,
+  matchOffset: normalizeMatchOffset(result.matchOffset),
   matchSystemTime: performance.now(),
 });
 
@@ -56,6 +59,9 @@ const subscribe = <T>(eventName: string, listener: (payload: T) => void) => {
 
 export const MusicRecognitionService = {
   identify: async (): Promise<RecognitionResult> => {
+    if (Platform.OS === 'android') {
+      await ensureMicrophonePermission();
+    }
     const result = await ShazamKitRecognition.identify(SHAZAM_DEVELOPER_TOKEN);
     return mapRecognitionResult(result);
   },

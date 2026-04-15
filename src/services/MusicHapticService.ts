@@ -1,4 +1,5 @@
 import {NativeEventEmitter, NativeModules} from 'react-native';
+import {ensureMicrophonePermission} from './AudioPermissionService';
 
 const {MusicHapticEngine} = NativeModules as {
   MusicHapticEngine?: {
@@ -67,6 +68,7 @@ export const MusicHapticService = {
     }
 
     try {
+      await ensureMicrophonePermission();
       await MusicHapticEngine.start();
       running = true;
       MusicHapticEngine.setConfig(currentConfig);

@@ -20,6 +20,7 @@ type TranslationStrings = {
   signaturesChecked: string;
   noSongRecognized: string;
   recognitionFailed: string;
+  microphonePermissionRequired: string;
   loadingLyrics: string;
   lyricsUnavailable: string;
 
@@ -72,6 +73,7 @@ const en: TranslationStrings = {
   signaturesChecked: 'signatures checked',
   noSongRecognized: 'No song recognized',
   recognitionFailed: 'Recognition failed',
+  microphonePermissionRequired: 'Microphone permission required',
   loadingLyrics: 'Loading lyrics...',
   lyricsUnavailable: 'Lyrics unavailable',
   subBass: 'Sub Bass',
@@ -120,6 +122,7 @@ const es: TranslationStrings = {
   signaturesChecked: 'firmas verificadas',
   noSongRecognized: 'No se reconoció canción',
   recognitionFailed: 'Reconocimiento fallido',
+  microphonePermissionRequired: 'Se requiere permiso de micrófono',
   loadingLyrics: 'Cargando letras...',
   lyricsUnavailable: 'Letras no disponibles',
   subBass: 'Sub Bajo',
@@ -168,6 +171,7 @@ const fr: TranslationStrings = {
   signaturesChecked: 'signatures vérifiées',
   noSongRecognized: 'Aucune chanson reconnue',
   recognitionFailed: 'Échec de la reconnaissance',
+  microphonePermissionRequired: 'Autorisation du microphone requise',
   loadingLyrics: 'Chargement des paroles...',
   lyricsUnavailable: 'Paroles indisponibles',
   subBass: 'Sub Basse',
@@ -216,6 +220,7 @@ const de: TranslationStrings = {
   signaturesChecked: 'Signaturen geprüft',
   noSongRecognized: 'Kein Lied erkannt',
   recognitionFailed: 'Erkennung fehlgeschlagen',
+  microphonePermissionRequired: 'Mikrofonberechtigung erforderlich',
   loadingLyrics: 'Liedtexte laden...',
   lyricsUnavailable: 'Liedtexte nicht verfügbar',
   subBass: 'Sub Bass',
@@ -264,6 +269,7 @@ const ja: TranslationStrings = {
   signaturesChecked: 'シグネチャ確認済み',
   noSongRecognized: '曲が認識できません',
   recognitionFailed: '認識に失敗しました',
+  microphonePermissionRequired: 'マイクの許可が必要です',
   loadingLyrics: '歌詞を読み込み中...',
   lyricsUnavailable: '歌詞がありません',
   subBass: 'サブベース',
@@ -312,6 +318,7 @@ const ko: TranslationStrings = {
   signaturesChecked: '시그니처 확인됨',
   noSongRecognized: '노래를 인식하지 못했습니다',
   recognitionFailed: '인식 실패',
+  microphonePermissionRequired: '마이크 권한이 필요합니다',
   loadingLyrics: '가사 로딩 중...',
   lyricsUnavailable: '가사를 사용할 수 없습니다',
   subBass: '서브 베이스',

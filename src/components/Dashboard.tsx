@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  StatusBar,
   Text,
   TouchableOpacity,
   View,
@@ -116,6 +117,7 @@ const normalizeSongIdentityPart = (value: string) =>
 
 const LYRIC_SCROLL_PADDING_TOP = 10;
 const LYRIC_ACTIVE_LINE_OFFSET = 56;
+const IS_ANDROID = Platform.OS === 'android';
 const SONG_SWITCH_CONFIRMATIONS = 2;
 const SONG_SWITCH_MIN_STABILITY_MS = 800;
 const SONG_SWITCH_PENDING_MAX_AGE_MS = 4500;
@@ -128,6 +130,7 @@ const SAME_SONG_BACKWARD_CONFIRMATIONS = 4;
 const SAME_SONG_BACKWARD_MIN_STABILITY_MS = 2200;
 const DEFAULT_MIC_BANDS: [number, number, number, number] = [30, 22, 18, 12];
 const MARQUEE_GAP = 48;
+const ANDROID_NAV_INSET = IS_ANDROID ? 118 : 0;
 const WAVE_TIME_STEPS: [number, number, number, number] = [
   0.016, 0.022, 0.03, 0.04,
 ];
@@ -1001,6 +1004,8 @@ export const Dashboard = () => {
   );
 
   const palette = getPalette(theme);
+  const androidStatusBarInset =
+    Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
   const resetMicBands = () => {
     micBandsRef.current = [...DEFAULT_MIC_BANDS];
   };
@@ -1101,6 +1106,12 @@ export const Dashboard = () => {
   }, [recognized, tab]);
 
   useEffect(() => {
+    if (IS_ANDROID && !isListening) {
+      transitioningRef.current = false;
+    }
+  }, [isListening, recognized]);
+
+  useEffect(() => {
     if (!recognized) {
       setPlaybackPosition(0);
       return undefined;
@@ -1111,7 +1122,11 @@ export const Dashboard = () => {
     }
 
     const interval = setInterval(() => {
-      setPlaybackPosition(syncEngineRef.current.getBasePosition());
+      setPlaybackPosition(
+        IS_ANDROID
+          ? syncEngineRef.current.getCurrentPosition()
+          : syncEngineRef.current.getBasePosition(),
+      );
     }, 100);
 
     return () => clearInterval(interval);
@@ -1363,12 +1378,19 @@ export const Dashboard = () => {
       const pending = pendingSongSwitchRef.current;
 
       if (!pending || pending.key !== nextSongKey) {
-        pendingSongSwitchRef.current = {
+        const nextPending: PendingSongSwitch = {
           key: nextSongKey,
           count: 1,
           firstSeenMs: now,
           latest: result,
         };
+        pendingSongSwitchRef.current = nextPending;
+        if (
+          SONG_SWITCH_CONFIRMATIONS <= 1 &&
+          SONG_SWITCH_MIN_STABILITY_MS <= 0
+        ) {
+          activateMatchedSongRef.current(nextPending.latest);
+        }
         return;
       }
 
@@ -1490,6 +1512,9 @@ export const Dashboard = () => {
       pendingSongSwitchRef.current = null;
       recognizedRef.current = true;
       isListeningRef.current = false;
+      if (IS_ANDROID) {
+        transitioningRef.current = false;
+      }
       setRecognized(true);
       setIsListening(false);
 
@@ -1502,12 +1527,20 @@ export const Dashboard = () => {
       }
 
       isListeningRef.current = false;
+      if (IS_ANDROID) {
+        transitioningRef.current = false;
+      }
       setIsListening(false);
 
-      const code = err.code || err.message || '';
+      const code = err.code || '';
+      const message = err.message || '';
       if (code === 'CANCELLED') {
       } else if (code === 'TIMEOUT') {
         setRecognitionError(i18n.noSongRecognized);
+      } else if (code === 'PERMISSION') {
+        setRecognitionError(i18n.microphonePermissionRequired);
+      } else if (code.startsWith('SESSION_ERROR_') || code.startsWith('MATCH_ERROR_')) {
+        setRecognitionError(message || i18n.recognitionFailed);
       } else if (code !== 'BUSY') {
         setRecognitionError(i18n.recognitionFailed);
       }
@@ -1611,7 +1644,12 @@ export const Dashboard = () => {
         style={{bottom: 160, right: -90}}
       />
 
-      <SafeAreaView style={{flex: 1, backgroundColor: 'transparent'}}>
+      <SafeAreaView
+        style={{
+          flex: 1,
+          backgroundColor: 'transparent',
+          paddingTop: androidStatusBarInset,
+        }}>
         {/* Header */}
         <View
           style={{
@@ -1648,7 +1686,13 @@ export const Dashboard = () => {
         </View>
 
         {/* Tab content */}
-        <View style={{flex: 1, paddingHorizontal: 24, overflow: 'hidden'}}>
+        <View
+          style={{
+            flex: 1,
+            paddingHorizontal: 24,
+            paddingBottom: ANDROID_NAV_INSET,
+            overflow: 'hidden',
+          }}>
           {/* Listen tab */}
           {tab === 'listen' && (
             <View style={{flex: 1, flexDirection: 'column'}}>
@@ -1874,7 +1918,11 @@ export const Dashboard = () => {
                   {/* Lyrics card */}
                   <GlassCard
                     palette={palette}
-                    style={{flex: 1, marginBottom: 88, padding: 18}}>
+                    style={{
+                      flex: 1,
+                      marginBottom: IS_ANDROID ? 16 : 88,
+                      padding: 18,
+                    }}>
                     <View
                       style={[
                         styles.rowBetween,
@@ -2382,6 +2430,7 @@ export const Dashboard = () => {
                 </View>
               </GlassCard>
 
+              {!IS_ANDROID && (
               <GlassCard palette={palette} style={{padding: 20}}>
                 <Text
                   style={{
@@ -2498,6 +2547,7 @@ export const Dashboard = () => {
                   {i18n.iconConfirmHint}
                 </Text>
               </GlassCard>
+              )}
 
               <GlassCard palette={palette} style={{padding: 20}}>
                 <Text
@@ -2808,6 +2858,7 @@ export const Dashboard = () => {
           paddingBottom: 34,
           paddingTop: 20,
           zIndex: 10,
+          elevation: IS_ANDROID ? 24 : 0,
         }}>
         <View style={styles.navRow}>
           <NavItem
